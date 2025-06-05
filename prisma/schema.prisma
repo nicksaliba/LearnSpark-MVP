@@ -1,0 +1,87 @@
+// prisma/schema.prisma - Complete Fixed Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  username      String    @unique
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  avatarUrl     String?   @map("avatar_url")
+  xpTotal       Int       @default(0) @map("xp_total")
+  level         Int       @default(1)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  
+  progress      UserProgress[]
+  achievements  UserAchievement[]
+  
+  @@map("users")
+}
+
+model Lesson {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  content     Json
+  module      String
+  orderIndex  Int       @map("order_index")
+  xpReward    Int       @default(100) @map("xp_reward")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  progress    UserProgress[]
+  
+  @@map("lessons")
+}
+
+model UserProgress {
+  id               String    @id @default(cuid())
+  userId           String    @map("user_id")
+  lessonId         String    @map("lesson_id")
+  status           String    @default("not_started")
+  score            Int       @default(0)
+  attempts         Int       @default(0)
+  codeSubmissions  Json?     @map("code_submissions")
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson           Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, lessonId])
+  @@map("user_progress")
+}
+
+model Achievement {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  icon        String?
+  xpReward    Int       @default(50) @map("xp_reward")
+  criteria    Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  userAchievements UserAchievement[]
+  
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  achievementId String    @map("achievement_id")
+  earnedAt      DateTime  @default(now()) @map("earned_at")
+  
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement  @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
