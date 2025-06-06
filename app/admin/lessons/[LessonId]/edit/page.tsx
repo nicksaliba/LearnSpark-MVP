@@ -1,13 +1,13 @@
-// app/admin/lessons/new/page.tsx - Complete Create New Lesson Page
+// app/admin/lessons/[lessonId]/edit/page.tsx - Edit Lesson Page
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Save, Plus, Trash2, Eye } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
 interface LessonFormData {
@@ -32,33 +32,44 @@ interface LessonFormData {
   }
 }
 
-const initialFormData: LessonFormData = {
-  title: '',
-  description: '',
-  module: 'code-kingdom',
-  orderIndex: 1,
-  xpReward: 100,
-  content: {
-    difficulty: 'beginner',
-    estimatedTime: 15,
-    objectives: [''],
-    theory: '',
-    initialCode: '',
-    language: 'python',
-    testCases: [{ expectedOutput: '', description: '' }],
-    hints: ['']
-  }
-}
-
-export default function NewLessonPage() {
+export default function EditLessonPage() {
+  const params = useParams()
   const router = useRouter()
-  const [formData, setFormData] = useState<LessonFormData>(initialFormData)
-  const [isLoading, setIsLoading] = useState(false)
+  const lessonId = params?.lessonId as string
+  
+  const [formData, setFormData] = useState<LessonFormData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'basic' | 'content' | 'code' | 'preview'>('basic')
 
+  useEffect(() => {
+    fetchLesson()
+  }, [lessonId])
+
+  const fetchLesson = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch(`/api/admin/lessons/${lessonId}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch lesson')
+      }
+
+      const { lesson } = await response.json()
+      setFormData(lesson)
+    } catch (err) {
+      setError('Failed to load lesson')
+      console.error('Lesson fetch error:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleSave = async () => {
-    setIsLoading(true)
+    if (!formData) return
+
+    setIsSaving(true)
     setError(null)
 
     try {
@@ -78,82 +89,88 @@ export default function NewLessonPage() {
         }
       }
 
-      const response = await fetch('/api/admin/lessons', {
-        method: 'POST',
+      const response = await fetch(`/api/admin/lessons/${lessonId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cleanedData)
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create lesson')
+        throw new Error(errorData.error || 'Failed to update lesson')
       }
 
-      const result = await response.json()
-      router.push(`/admin/lessons`)
+      router.push('/admin/lessons')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save lesson')
     } finally {
-      setIsLoading(false)
+      setIsSaving(false)
     }
   }
 
+  // Helper functions for managing arrays (same as in new lesson page)
   const addObjective = () => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        objectives: [...prev.content.objectives, '']
+        ...prev!.content,
+        objectives: [...prev!.content.objectives, '']
       }
     }))
   }
 
   const removeObjective = (index: number) => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        objectives: prev.content.objectives.filter((_, i) => i !== index)
+        ...prev!.content,
+        objectives: prev!.content.objectives.filter((_, i) => i !== index)
       }
     }))
   }
 
   const updateObjective = (index: number, value: string) => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        objectives: prev.content.objectives.map((obj, i) => i === index ? value : obj)
+        ...prev!.content,
+        objectives: prev!.content.objectives.map((obj, i) => i === index ? value : obj)
       }
     }))
   }
 
   const addTestCase = () => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        testCases: [...prev.content.testCases, { expectedOutput: '', description: '' }]
+        ...prev!.content,
+        testCases: [...prev!.content.testCases, { expectedOutput: '', description: '' }]
       }
     }))
   }
 
   const removeTestCase = (index: number) => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        testCases: prev.content.testCases.filter((_, i) => i !== index)
+        ...prev!.content,
+        testCases: prev!.content.testCases.filter((_, i) => i !== index)
       }
     }))
   }
 
   const updateTestCase = (index: number, field: string, value: string) => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        testCases: prev.content.testCases.map((tc, i) => 
+        ...prev!.content,
+        testCases: prev!.content.testCases.map((tc, i) => 
           i === index ? { ...tc, [field]: value } : tc
         )
       }
@@ -161,34 +178,68 @@ export default function NewLessonPage() {
   }
 
   const addHint = () => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        hints: [...prev.content.hints, '']
+        ...prev!.content,
+        hints: [...prev!.content.hints, '']
       }
     }))
   }
 
   const removeHint = (index: number) => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        hints: prev.content.hints.filter((_, i) => i !== index)
+        ...prev!.content,
+        hints: prev!.content.hints.filter((_, i) => i !== index)
       }
     }))
   }
 
   const updateHint = (index: number, value: string) => {
+    if (!formData) return
     setFormData(prev => ({
-      ...prev,
+      ...prev!,
       content: {
-        ...prev.content,
-        hints: prev.content.hints.map((hint, i) => i === index ? value : hint)
+        ...prev!.content,
+        hints: prev!.content.hints.map((hint, i) => i === index ? value : hint)
       }
     }))
   }
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-64"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !formData) {
+    return (
+      <div className="p-6">
+        <Card className="p-8 text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Lesson</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <div className="flex gap-4 justify-center">
+            <Button onClick={fetchLesson}>Try Again</Button>
+            <Button variant="outline" asChild>
+              <Link href="/admin/lessons">Back to Lessons</Link>
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!formData) return null
 
   const tabs = [
     { id: 'basic', label: 'Basic Info' },
@@ -209,14 +260,21 @@ export default function NewLessonPage() {
             </Link>
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Create New Lesson</h1>
-            <p className="text-gray-600">Add engaging content to your learning modules</p>
+            <h1 className="text-3xl font-bold text-gray-900">Edit Lesson</h1>
+            <p className="text-gray-600">Modify lesson content and settings</p>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={isLoading}>
-          <Save className="h-4 w-4 mr-2" />
-          {isLoading ? 'Saving...' : 'Save Lesson'}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/learn/${formData.module}/${lessonId}`} target="_blank">
+              Preview Live
+            </Link>
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            <Save className="h-4 w-4 mr-2" />
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -256,7 +314,7 @@ export default function NewLessonPage() {
               </label>
               <Input
                 value={formData.title}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                onChange={(e) => setFormData(prev => prev ? ({ ...prev, title: e.target.value }) : null)}
                 placeholder="Enter lesson title"
               />
             </div>
@@ -267,7 +325,7 @@ export default function NewLessonPage() {
               </label>
               <select
                 value={formData.module}
-                onChange={(e) => setFormData(prev => ({ ...prev, module: e.target.value }))}
+                onChange={(e) => setFormData(prev => prev ? ({ ...prev, module: e.target.value }) : null)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="code-kingdom">Code Kingdom</option>
@@ -283,7 +341,7 @@ export default function NewLessonPage() {
             </label>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              onChange={(e) => setFormData(prev => prev ? ({ ...prev, description: e.target.value }) : null)}
               placeholder="Describe what students will learn in this lesson"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-24 resize-none"
             />
@@ -296,10 +354,10 @@ export default function NewLessonPage() {
               </label>
               <select
                 value={formData.content.difficulty}
-                onChange={(e) => setFormData(prev => ({
+                onChange={(e) => setFormData(prev => prev ? ({
                   ...prev,
                   content: { ...prev.content, difficulty: e.target.value as any }
-                }))}
+                }) : null)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="beginner">Beginner</option>
@@ -315,7 +373,7 @@ export default function NewLessonPage() {
               <Input
                 type="number"
                 value={formData.orderIndex}
-                onChange={(e) => setFormData(prev => ({ ...prev, orderIndex: parseInt(e.target.value) || 1 }))}
+                onChange={(e) => setFormData(prev => prev ? ({ ...prev, orderIndex: parseInt(e.target.value) || 1 }) : null)}
                 min="1"
               />
             </div>
@@ -327,7 +385,7 @@ export default function NewLessonPage() {
               <Input
                 type="number"
                 value={formData.xpReward}
-                onChange={(e) => setFormData(prev => ({ ...prev, xpReward: parseInt(e.target.value) || 100 }))}
+                onChange={(e) => setFormData(prev => prev ? ({ ...prev, xpReward: parseInt(e.target.value) || 100 }) : null)}
                 min="0"
               />
             </div>
@@ -340,10 +398,10 @@ export default function NewLessonPage() {
             <Input
               type="number"
               value={formData.content.estimatedTime}
-              onChange={(e) => setFormData(prev => ({
+              onChange={(e) => setFormData(prev => prev ? ({
                 ...prev,
                 content: { ...prev.content, estimatedTime: parseInt(e.target.value) || 15 }
-              }))}
+              }) : null)}
               min="1"
               className="w-32"
             />
@@ -351,7 +409,7 @@ export default function NewLessonPage() {
         </Card>
       )}
 
-      {/* Content Tab */}
+      {/* Content Tab - Similar to new lesson page but with formData checks */}
       {activeTab === 'content' && (
         <Card className="p-6 space-y-6">
           <h2 className="text-xl font-bold text-gray-900">Learning Content</h2>
@@ -396,11 +454,11 @@ export default function NewLessonPage() {
               Theory Content (HTML supported)
             </label>
             <textarea
-              value={formData.content.theory}
-              onChange={(e) => setFormData(prev => ({
+              value={formData.content.theory || ''}
+              onChange={(e) => setFormData(prev => prev ? ({
                 ...prev,
                 content: { ...prev.content, theory: e.target.value }
-              }))}
+              }) : null)}
               placeholder="Enter lesson theory content. You can use HTML tags for formatting."
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-64 resize-none font-mono text-sm"
             />
@@ -422,11 +480,11 @@ export default function NewLessonPage() {
               Programming Language
             </label>
             <select
-              value={formData.content.language}
-              onChange={(e) => setFormData(prev => ({
+              value={formData.content.language || 'python'}
+              onChange={(e) => setFormData(prev => prev ? ({
                 ...prev,
                 content: { ...prev.content, language: e.target.value }
-              }))}
+              }) : null)}
               className="w-48 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="python">Python</option>
@@ -442,11 +500,11 @@ export default function NewLessonPage() {
               Initial Code Template
             </label>
             <textarea
-              value={formData.content.initialCode}
-              onChange={(e) => setFormData(prev => ({
+              value={formData.content.initialCode || ''}
+              onChange={(e) => setFormData(prev => prev ? ({
                 ...prev,
                 content: { ...prev.content, initialCode: e.target.value }
-              }))}
+              }) : null)}
               placeholder="Enter the initial code template that students will see"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-64 resize-none font-mono text-sm"
             />
@@ -464,11 +522,11 @@ export default function NewLessonPage() {
               </Button>
             </div>
             <div className="space-y-4">
-              {formData.content.testCases.map((testCase, index) => (
+              {formData.content.testCases?.map((testCase, index) => (
                 <Card key={index} className="p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="font-medium">Test Case {index + 1}</h4>
-                    {formData.content.testCases.length > 1 && (
+                    {formData.content.testCases && formData.content.testCases.length > 1 && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -503,7 +561,7 @@ export default function NewLessonPage() {
                     </div>
                   </div>
                 </Card>
-              ))}
+              )) || []}
             </div>
           </div>
 
@@ -519,14 +577,14 @@ export default function NewLessonPage() {
               </Button>
             </div>
             <div className="space-y-2">
-              {formData.content.hints.map((hint, index) => (
+              {formData.content.hints?.map((hint, index) => (
                 <div key={index} className="flex gap-2">
                   <Input
                     value={hint}
                     onChange={(e) => updateHint(index, e.target.value)}
                     placeholder={`Hint ${index + 1}`}
                   />
-                  {formData.content.hints.length > 1 && (
+                  {formData.content.hints && formData.content.hints.length > 1 && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -537,7 +595,7 @@ export default function NewLessonPage() {
                     </Button>
                   )}
                 </div>
-              ))}
+              )) || []}
             </div>
           </div>
         </Card>
@@ -551,8 +609,8 @@ export default function NewLessonPage() {
           <div className="bg-gray-50 rounded-lg p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">{formData.title || 'Untitled Lesson'}</h1>
-                <p className="text-gray-600">{formData.description || 'No description provided'}</p>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">{formData.title}</h1>
+                <p className="text-gray-600">{formData.description}</p>
               </div>
               <div className="flex gap-2">
                 <Badge className={
@@ -622,7 +680,7 @@ export default function NewLessonPage() {
             )}
 
             {/* Test Cases Preview */}
-            {formData.content.testCases.filter(tc => tc.expectedOutput.trim()).length > 0 && (
+            {formData.content.testCases && formData.content.testCases.filter(tc => tc.expectedOutput.trim()).length > 0 && (
               <div className="mb-6">
                 <h3 className="font-medium text-gray-900 mb-2">Test Cases</h3>
                 <div className="space-y-2">
@@ -643,7 +701,7 @@ export default function NewLessonPage() {
             )}
 
             {/* Hints Preview */}
-            {formData.content.hints.filter(hint => hint.trim()).length > 0 && (
+            {formData.content.hints && formData.content.hints.filter(hint => hint.trim()).length > 0 && (
               <div>
                 <h3 className="font-medium text-gray-900 mb-2">Hints Available</h3>
                 <div className="space-y-1">
@@ -660,14 +718,6 @@ export default function NewLessonPage() {
           </div>
         </Card>
       )}
-
-      {/* Save button at bottom for easy access */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isLoading} size="lg">
-          <Save className="h-4 w-4 mr-2" />
-          {isLoading ? 'Creating Lesson...' : 'Create Lesson'}
-        </Button>
-      </div>
     </div>
   )
 }
