@@ -1,4 +1,4 @@
-// app/api/lessons/[lessonId]/route.ts - Complete Individual Lesson API Route
+// app/api/admin/lessons/[lessonId]/route.ts - Fixed with awaited params
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { PrismaClient } from '@prisma/client'
@@ -7,99 +7,22 @@ import { z } from 'zod'
 
 const prisma = new PrismaClient()
 
-// GET /api/lessons/[lessonId] - Get individual lesson (public/student access)
+// GET /api/admin/lessons/[lessonId] - Get individual lesson for admin
 export async function GET(
   request: NextRequest,
-  { params }: { params: { lessonId: string } }
+  { params }: { params: Promise<{ lessonId: string }> }
 ) {
   try {
-    console.log('🔍 Individual lesson API called')
-    console.log('🔍 Params received:', params)
-    console.log('🔍 Lesson ID:', params?.lessonId)
+    console.log('🔍 Admin lesson API called')
+    
+    // Await params before accessing properties
+    const { lessonId } = await params
+    
+    console.log('🔍 Admin - Lesson ID:', lessonId)
     
     // Validate that we have a lesson ID
-    if (!params?.lessonId) {
+    if (!lessonId) {
       console.error('❌ No lesson ID provided in params')
-      return NextResponse.json(
-        { error: 'Lesson ID is required' },
-        { status: 400 }
-      )
-    }
-
-    const session = await auth()
-    console.log('🔍 Session user:', session?.user?.email || 'No session')
-
-    const lesson = await prisma.lesson.findUnique({
-      where: { id: params.lessonId }
-    })
-
-    if (!lesson) {
-      console.log('❌ Lesson not found:', params.lessonId)
-      return NextResponse.json(
-        { error: 'Lesson not found' },
-        { status: 404 }
-      )
-    }
-
-    console.log('✅ Lesson found:', lesson.title)
-
-    // If user is authenticated, also get their progress for this lesson
-    let userProgress = null
-    if (session?.user?.id) {
-      console.log('🔍 Fetching user progress for:', session.user.id)
-      
-      try {
-        userProgress = await prisma.userProgress.findUnique({
-          where: {
-            userId_lessonId: {
-              userId: session.user.id,
-              lessonId: params.lessonId
-            }
-          }
-        })
-        
-        console.log('📊 User progress:', userProgress?.status || 'No progress')
-      } catch (progressError) {
-        console.log('⚠️ Progress fetch failed:', progressError instanceof Error ? progressError.message : 'Unknown error')
-        // Continue without progress - not critical
-      }
-    }
-
-    return NextResponse.json({ 
-      lesson,
-      userProgress
-    })
-
-  } catch (error:any) {
-    console.error('💥 Lesson fetch error:', error)
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack
-    })
-    
-    return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      },
-      { status: 500 }
-    )
-  } finally {
-    await prisma.$disconnect()
-  }
-}
-
-// PUT /api/lessons/[lessonId] - Update lesson (admin access required)
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { lessonId: string } }
-) {
-  try {
-    console.log('📝 Lesson update API called')
-    console.log('🔍 Lesson ID:', params?.lessonId)
-
-    // Validate that we have a lesson ID
-    if (!params?.lessonId) {
       return NextResponse.json(
         { error: 'Lesson ID is required' },
         { status: 400 }
@@ -113,7 +36,73 @@ export async function PUT(
     }
 
     // Simple admin check (you can enhance this)
-    const adminEmails = ['admin@learnspark.com', process.env.ADMIN_EMAIL].filter(Boolean)
+    const adminEmails = ['nick.saliba@gmail.com', process.env.ADMIN_EMAIL].filter(Boolean)
+    const isAdmin = adminEmails.includes(session.user.email || '')
+    
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId }
+    })
+
+    if (!lesson) {
+      console.log('❌ Admin - Lesson not found:', lessonId)
+      return NextResponse.json(
+        { error: 'Lesson not found' },
+        { status: 404 }
+      )
+    }
+
+    console.log('✅ Admin - Lesson found:', lesson.title)
+
+    return NextResponse.json({ lesson })
+
+  } catch (error: any) {
+    console.error('💥 Admin lesson fetch error:', error)
+    
+    return NextResponse.json(
+      { 
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
+      { status: 500 }
+    )
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
+// PUT /api/admin/lessons/[lessonId] - Update lesson
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ lessonId: string }> }
+) {
+  try {
+    console.log('📝 Admin lesson update API called')
+    
+    // Await params before accessing properties
+    const { lessonId } = await params
+    
+    console.log('🔍 Admin update - Lesson ID:', lessonId)
+
+    // Validate that we have a lesson ID
+    if (!lessonId) {
+      return NextResponse.json(
+        { error: 'Lesson ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if user is admin
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    // Simple admin check (you can enhance this)
+    const adminEmails = ['nick.saliba@gmail.com', process.env.ADMIN_EMAIL].filter(Boolean)
     const isAdmin = adminEmails.includes(session.user.email || '')
     
     if (!isAdmin) {
@@ -128,7 +117,7 @@ export async function PUT(
 
     // Check if lesson exists
     const existingLesson = await prisma.lesson.findUnique({
-      where: { id: params.lessonId }
+      where: { id: lessonId }
     })
 
     if (!existingLesson) {
@@ -141,7 +130,7 @@ export async function PUT(
         where: {
           module: validatedData.module,
           orderIndex: validatedData.orderIndex,
-          id: { not: params.lessonId }
+          id: { not: lessonId }
         }
       })
 
@@ -155,7 +144,7 @@ export async function PUT(
     }
 
     const updatedLesson = await prisma.lesson.update({
-      where: { id: params.lessonId },
+      where: { id: lessonId },
       data: validatedData
     })
 
@@ -165,7 +154,7 @@ export async function PUT(
       { message: 'Lesson updated successfully', lesson: updatedLesson }
     )
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Admin lesson update error:', error)
 
     if (error instanceof z.ZodError) {
@@ -191,17 +180,21 @@ export async function PUT(
   }
 }
 
-// DELETE /api/lessons/[lessonId] - Delete lesson (admin access required)
+// DELETE /api/admin/lessons/[lessonId] - Delete lesson
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { lessonId: string } }
+  { params }: { params: Promise<{ lessonId: string }> }
 ) {
   try {
-    console.log('🗑️ Lesson delete API called')
-    console.log('🔍 Lesson ID:', params?.lessonId)
+    console.log('🗑️ Admin lesson delete API called')
+    
+    // Await params before accessing properties
+    const { lessonId } = await params
+    
+    console.log('🔍 Admin delete - Lesson ID:', lessonId)
 
     // Validate that we have a lesson ID
-    if (!params?.lessonId) {
+    if (!lessonId) {
       return NextResponse.json(
         { error: 'Lesson ID is required' },
         { status: 400 }
@@ -215,18 +208,18 @@ export async function DELETE(
     }
 
     // Simple admin check (you can enhance this)
-    const adminEmails = ['admin@learnspark.com', process.env.ADMIN_EMAIL].filter(Boolean)
+    const adminEmails = ['nick.saliba@gmail.com', process.env.ADMIN_EMAIL].filter(Boolean)
     const isAdmin = adminEmails.includes(session.user.email || '')
     
     if (!isAdmin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 
-    console.log('🗑️ Attempting to delete lesson:', params.lessonId)
+    console.log('🗑️ Attempting to delete lesson:', lessonId)
 
     // Check if lesson exists
     const existingLesson = await prisma.lesson.findUnique({
-      where: { id: params.lessonId }
+      where: { id: lessonId }
     })
 
     if (!existingLesson) {
@@ -235,7 +228,7 @@ export async function DELETE(
 
     // Check if lesson has user progress
     const progressCount = await prisma.userProgress.count({
-      where: { lessonId: params.lessonId }
+      where: { lessonId: lessonId }
     })
 
     if (progressCount > 0) {
@@ -250,17 +243,17 @@ export async function DELETE(
     }
 
     await prisma.lesson.delete({
-      where: { id: params.lessonId }
+      where: { id: lessonId }
     })
 
-    console.log('✅ Lesson deleted:', params.lessonId)
+    console.log('✅ Lesson deleted:', lessonId)
 
     return NextResponse.json({ 
       message: 'Lesson deleted successfully',
-      deletedLessonId: params.lessonId
+      deletedLessonId: lessonId
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Lesson deletion error:', error)
 
     if (error.code === 'P2025') {

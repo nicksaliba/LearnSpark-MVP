@@ -1,16 +1,29 @@
-// app/admin/lessons/new/page.tsx - Complete Create New Lesson Page
+// app/learn/[module]/page.tsx - Fixed Module Overview Page
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
+import { Navbar } from '@/components/navigation/navbar'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Save, Plus, Trash2, Eye } from 'lucide-react'
+import { 
+  ArrowLeft,
+  BookOpen, 
+  Clock, 
+  Award, 
+  CheckCircle,
+  Lock,
+  Play,
+  Code,
+  Brain,
+  Crown
+} from 'lucide-react'
 import Link from 'next/link'
 
-interface LessonFormData {
+interface Lesson {
+  id: string
   title: string
   description: string
   module: string
@@ -20,654 +33,335 @@ interface LessonFormData {
     difficulty: 'beginner' | 'intermediate' | 'advanced'
     estimatedTime: number
     objectives: string[]
-    theory: string
-    initialCode: string
-    language: string
-    testCases: Array<{
-      expectedOutput: string
-      description: string
-      input?: string
-    }>
-    hints: string[]
+  }
+  userProgress?: {
+    status: 'not_started' | 'in_progress' | 'completed'
+    score: number
   }
 }
 
-const initialFormData: LessonFormData = {
-  title: '',
-  description: '',
-  module: 'code-kingdom',
-  orderIndex: 1,
-  xpReward: 100,
-  content: {
-    difficulty: 'beginner',
-    estimatedTime: 15,
-    objectives: [''],
-    theory: '',
-    initialCode: '',
-    language: 'python',
-    testCases: [{ expectedOutput: '', description: '' }],
-    hints: ['']
+const moduleInfo = {
+  'code-kingdom': {
+    title: 'Code Kingdom',
+    description: 'Master programming fundamentals with Python, JavaScript, and more',
+    icon: Code,
+    color: 'from-blue-500 to-blue-600'
+  },
+  'ai-citadel': {
+    title: 'AI Citadel',
+    description: 'Explore machine learning, neural networks, and AI ethics',
+    icon: Brain,
+    color: 'from-purple-500 to-purple-600'
+  },
+  'chess-arena': {
+    title: 'Chess Arena',
+    description: 'Develop strategic thinking through chess mastery',
+    icon: Crown,
+    color: 'from-yellow-500 to-yellow-600'
   }
 }
 
-export default function NewLessonPage() {
+export default function ModulePage() {
+  const { data: session, status } = useSession()
+  const params = useParams()
   const router = useRouter()
-  const [formData, setFormData] = useState<LessonFormData>(initialFormData)
-  const [isLoading, setIsLoading] = useState(false)
+  const moduleId = params?.module as string
+  
+  const [lessons, setLessons] = useState<Lesson[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'basic' | 'content' | 'code' | 'preview'>('basic')
 
-  const handleSave = async () => {
-    setIsLoading(true)
-    setError(null)
+  useEffect(() => {
+    console.log('📚 Module page - Module ID:', moduleId)
+    console.log('📚 Module page - Session status:', status)
+    
+    if (status === 'loading') return
+    
+    if (status === 'unauthenticated' || !session) {
+      router.push('/login')
+      return
+    }
 
+    if (!moduleId || !moduleInfo[moduleId as keyof typeof moduleInfo]) {
+      router.push('/dashboard')
+      return
+    }
+
+    fetchModuleLessons()
+  }, [moduleId, session, status, router])
+
+  const fetchModuleLessons = async () => {
     try {
-      // Validate required fields
-      if (!formData.title || !formData.description) {
-        throw new Error('Title and description are required')
-      }
+      setIsLoading(true)
+      setError(null)
 
-      // Clean up empty arrays
-      const cleanedData = {
-        ...formData,
-        content: {
-          ...formData.content,
-          objectives: formData.content.objectives.filter(obj => obj.trim()),
-          hints: formData.content.hints.filter(hint => hint.trim()),
-          testCases: formData.content.testCases.filter(tc => tc.expectedOutput.trim())
-        }
-      }
-
-      const response = await fetch('/api/admin/lessons', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cleanedData)
-      })
-
+      console.log('🔍 Fetching lessons for module:', moduleId)
+      
+      const response = await fetch(`/api/lessons?module=${moduleId}`)
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create lesson')
+        throw new Error('Failed to fetch lessons')
       }
 
-      const result = await response.json()
-      router.push(`/admin/lessons`)
+      const data = await response.json()
+      console.log('✅ Module lessons data:', data)
+      
+      // Sort lessons by order index
+      const sortedLessons = data.lessons.sort((a: Lesson, b: Lesson) => a.orderIndex - b.orderIndex)
+      setLessons(sortedLessons)
+      
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save lesson')
+      console.error('❌ Failed to fetch module lessons:', err)
+      setError('Failed to load lessons')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const addObjective = () => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        objectives: [...prev.content.objectives, '']
-      }
-    }))
+  if (status === 'loading' || isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="animate-pulse space-y-6">
+            <div className="h-32 bg-gray-200 rounded-lg"></div>
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-24 bg-gray-200 rounded-lg"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  const removeObjective = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        objectives: prev.content.objectives.filter((_, i) => i !== index)
-      }
-    }))
+  if (status === 'unauthenticated' || !session) {
+    return null // Will redirect
   }
 
-  const updateObjective = (index: number, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        objectives: prev.content.objectives.map((obj, i) => i === index ? value : obj)
-      }
-    }))
+  if (!moduleId || !moduleInfo[moduleId as keyof typeof moduleInfo]) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <Card className="p-8 text-center">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Module Not Found</h2>
+            <p className="text-gray-600 mb-6">The requested learning module could not be found.</p>
+            <Button asChild>
+              <Link href="/dashboard">Back to Dashboard</Link>
+            </Button>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
-  const addTestCase = () => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        testCases: [...prev.content.testCases, { expectedOutput: '', description: '' }]
-      }
-    }))
+  const module = moduleInfo[moduleId as keyof typeof moduleInfo]
+  const Icon = module.icon
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="mb-6">
+            <Button variant="outline" asChild>
+              <Link href="/dashboard">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Dashboard
+              </Link>
+            </Button>
+          </div>
+          <Card className="p-8 text-center">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Unable to load lessons</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <Button onClick={fetchModuleLessons}>Try Again</Button>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
-  const removeTestCase = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        testCases: prev.content.testCases.filter((_, i) => i !== index)
-      }
-    }))
-  }
-
-  const updateTestCase = (index: number, field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        testCases: prev.content.testCases.map((tc, i) => 
-          i === index ? { ...tc, [field]: value } : tc
-        )
-      }
-    }))
-  }
-
-  const addHint = () => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        hints: [...prev.content.hints, '']
-      }
-    }))
-  }
-
-  const removeHint = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        hints: prev.content.hints.filter((_, i) => i !== index)
-      }
-    }))
-  }
-
-  const updateHint = (index: number, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      content: {
-        ...prev.content,
-        hints: prev.content.hints.map((hint, i) => i === index ? value : hint)
-      }
-    }))
-  }
-
-  const tabs = [
-    { id: 'basic', label: 'Basic Info' },
-    { id: 'content', label: 'Content' },
-    { id: 'code', label: 'Code & Tests' },
-    { id: 'preview', label: 'Preview' }
-  ]
+  const completedLessons = lessons.filter(lesson => lesson.userProgress?.status === 'completed').length
+  const totalLessons = lessons.length
+  const progressPercentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      
+      <main className="container mx-auto px-4 py-8">
+        {/* Back Button */}
+        <div className="mb-6">
           <Button variant="outline" asChild>
-            <Link href="/admin/lessons">
+            <Link href="/dashboard">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Lessons
+              Back to Dashboard
             </Link>
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Create New Lesson</h1>
-            <p className="text-gray-600">Add engaging content to your learning modules</p>
-          </div>
         </div>
-        <Button onClick={handleSave} disabled={isLoading}>
-          <Save className="h-4 w-4 mr-2" />
-          {isLoading ? 'Saving...' : 'Save Lesson'}
-        </Button>
-      </div>
 
-      {error && (
-        <Card className="p-4 bg-red-50 border-red-200">
-          <p className="text-red-600">{error}</p>
-        </Card>
-      )}
-
-      {/* Tabs */}
-      <Card className="p-1">
-        <div className="flex space-x-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      {/* Basic Info Tab */}
-      {activeTab === 'basic' && (
-        <Card className="p-6 space-y-6">
-          <h2 className="text-xl font-bold text-gray-900">Basic Information</h2>
-          
-          <div className="grid gap-6 md:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Lesson Title *
-              </label>
-              <Input
-                value={formData.title}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="Enter lesson title"
-              />
+        {/* Module Header */}
+        <Card className="mb-8 overflow-hidden">
+          <div className={`bg-gradient-to-r ${module.color} p-8 text-white`}>
+            <div className="flex items-center gap-4 mb-4">
+              <div className="bg-white/20 p-3 rounded-lg">
+                <Icon className="h-8 w-8" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold">{module.title}</h1>
+                <p className="text-white/90 text-lg">{module.description}</p>
+              </div>
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Module *
-              </label>
-              <select
-                value={formData.module}
-                onChange={(e) => setFormData(prev => ({ ...prev, module: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="code-kingdom">Code Kingdom</option>
-                <option value="ai-citadel">AI Citadel</option>
-                <option value="chess-arena">Chess Arena</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description *
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Describe what students will learn in this lesson"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-24 resize-none"
-            />
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Difficulty
-              </label>
-              <select
-                value={formData.content.difficulty}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  content: { ...prev.content, difficulty: e.target.value as any }
-                }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Order Index
-              </label>
-              <Input
-                type="number"
-                value={formData.orderIndex}
-                onChange={(e) => setFormData(prev => ({ ...prev, orderIndex: parseInt(e.target.value) || 1 }))}
-                min="1"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                XP Reward
-              </label>
-              <Input
-                type="number"
-                value={formData.xpReward}
-                onChange={(e) => setFormData(prev => ({ ...prev, xpReward: parseInt(e.target.value) || 100 }))}
-                min="0"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Estimated Time (minutes)
-            </label>
-            <Input
-              type="number"
-              value={formData.content.estimatedTime}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                content: { ...prev.content, estimatedTime: parseInt(e.target.value) || 15 }
-              }))}
-              min="1"
-              className="w-32"
-            />
-          </div>
-        </Card>
-      )}
-
-      {/* Content Tab */}
-      {activeTab === 'content' && (
-        <Card className="p-6 space-y-6">
-          <h2 className="text-xl font-bold text-gray-900">Learning Content</h2>
-          
-          {/* Learning Objectives */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-gray-700">
-                Learning Objectives
-              </label>
-              <Button variant="outline" size="sm" onClick={addObjective}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add Objective
-              </Button>
-            </div>
-            <div className="space-y-2">
-              {formData.content.objectives.map((objective, index) => (
-                <div key={index} className="flex gap-2">
-                  <Input
-                    value={objective}
-                    onChange={(e) => updateObjective(index, e.target.value)}
-                    placeholder={`Learning objective ${index + 1}`}
-                  />
-                  {formData.content.objectives.length > 1 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeObjective(index)}
-                      className="text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Theory Content */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Theory Content (HTML supported)
-            </label>
-            <textarea
-              value={formData.content.theory}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                content: { ...prev.content, theory: e.target.value }
-              }))}
-              placeholder="Enter lesson theory content. You can use HTML tags for formatting."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-64 resize-none font-mono text-sm"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              You can use HTML tags like &lt;h3&gt;, &lt;p&gt;, &lt;ul&gt;, &lt;li&gt;, &lt;code&gt;, etc.
-            </p>
-          </div>
-        </Card>
-      )}
-
-      {/* Code & Tests Tab */}
-      {activeTab === 'code' && (
-        <Card className="p-6 space-y-6">
-          <h2 className="text-xl font-bold text-gray-900">Code & Testing</h2>
-          
-          {/* Programming Language */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Programming Language
-            </label>
-            <select
-              value={formData.content.language}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                content: { ...prev.content, language: e.target.value }
-              }))}
-              className="w-48 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="python">Python</option>
-              <option value="javascript">JavaScript</option>
-              <option value="html">HTML</option>
-              <option value="css">CSS</option>
-            </select>
-          </div>
-
-          {/* Initial Code */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Initial Code Template
-            </label>
-            <textarea
-              value={formData.content.initialCode}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                content: { ...prev.content, initialCode: e.target.value }
-              }))}
-              placeholder="Enter the initial code template that students will see"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-64 resize-none font-mono text-sm"
-            />
-          </div>
-
-          {/* Test Cases */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-gray-700">
-                Test Cases
-              </label>
-              <Button variant="outline" size="sm" onClick={addTestCase}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add Test Case
-              </Button>
-            </div>
-            <div className="space-y-4">
-              {formData.content.testCases.map((testCase, index) => (
-                <Card key={index} className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-medium">Test Case {index + 1}</h4>
-                    {formData.content.testCases.length > 1 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeTestCase(index)}
-                        className="text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Description
-                      </label>
-                      <Input
-                        value={testCase.description}
-                        onChange={(e) => updateTestCase(index, 'description', e.target.value)}
-                        placeholder="Describe what this test case validates"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Expected Output
-                      </label>
-                      <textarea
-                        value={testCase.expectedOutput}
-                        onChange={(e) => updateTestCase(index, 'expectedOutput', e.target.value)}
-                        placeholder="Expected output from the code"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none font-mono text-sm"
-                      />
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-
-          {/* Hints */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-gray-700">
-                Hints
-              </label>
-              <Button variant="outline" size="sm" onClick={addHint}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add Hint
-              </Button>
-            </div>
-            <div className="space-y-2">
-              {formData.content.hints.map((hint, index) => (
-                <div key={index} className="flex gap-2">
-                  <Input
-                    value={hint}
-                    onChange={(e) => updateHint(index, e.target.value)}
-                    placeholder={`Hint ${index + 1}`}
-                  />
-                  {formData.content.hints.length > 1 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeHint(index)}
-                      className="text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Preview Tab */}
-      {activeTab === 'preview' && (
-        <Card className="p-6 space-y-6">
-          <h2 className="text-xl font-bold text-gray-900">Lesson Preview</h2>
-          
-          <div className="bg-gray-50 rounded-lg p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">{formData.title || 'Untitled Lesson'}</h1>
-                <p className="text-gray-600">{formData.description || 'No description provided'}</p>
+            {/* Progress Bar */}
+            <div className="mt-6">
+              <div className="flex justify-between text-sm mb-2">
+                <span>Progress: {completedLessons}/{totalLessons} lessons</span>
+                <span>{progressPercentage}% complete</span>
               </div>
-              <div className="flex gap-2">
-                <Badge className={
-                  formData.content.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
-                  formData.content.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }>
-                  {formData.content.difficulty}
-                </Badge>
-                <Badge variant="secondary">
-                  {formData.xpReward} XP
-                </Badge>
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-4 mb-6">
-              <div className="text-sm">
-                <span className="text-gray-600">Module:</span>
-                <div className="font-medium capitalize">{formData.module.replace('-', ' ')}</div>
-              </div>
-              <div className="text-sm">
-                <span className="text-gray-600">Estimated Time:</span>
-                <div className="font-medium">{formData.content.estimatedTime} minutes</div>
-              </div>
-              <div className="text-sm">
-                <span className="text-gray-600">Order:</span>
-                <div className="font-medium">Lesson {formData.orderIndex}</div>
-              </div>
-            </div>
-
-            {/* Learning Objectives */}
-            {formData.content.objectives.filter(obj => obj.trim()).length > 0 && (
-              <div className="mb-6">
-                <h3 className="font-medium text-gray-900 mb-2">Learning Objectives</h3>
-                <ul className="space-y-1">
-                  {formData.content.objectives
-                    .filter(obj => obj.trim())
-                    .map((objective, index) => (
-                    <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
-                      <span className="text-green-500 mt-1">•</span>
-                      {objective}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Theory Preview */}
-            {formData.content.theory && (
-              <div className="mb-6">
-                <h3 className="font-medium text-gray-900 mb-2">Theory Content</h3>
+              <div className="w-full bg-white/20 rounded-full h-3">
                 <div 
-                  className="prose max-w-none text-sm bg-white p-4 rounded border"
-                  dangerouslySetInnerHTML={{ __html: formData.content.theory }}
+                  className="bg-white h-3 rounded-full transition-all duration-500"
+                  style={{ width: `${progressPercentage}%` }}
                 />
               </div>
-            )}
-
-            {/* Code Preview */}
-            {formData.content.initialCode && (
-              <div className="mb-6">
-                <h3 className="font-medium text-gray-900 mb-2">Initial Code ({formData.content.language})</h3>
-                <pre className="bg-gray-900 text-green-400 p-4 rounded text-sm overflow-x-auto">
-                  {formData.content.initialCode}
-                </pre>
-              </div>
-            )}
-
-            {/* Test Cases Preview */}
-            {formData.content.testCases.filter(tc => tc.expectedOutput.trim()).length > 0 && (
-              <div className="mb-6">
-                <h3 className="font-medium text-gray-900 mb-2">Test Cases</h3>
-                <div className="space-y-2">
-                  {formData.content.testCases
-                    .filter(tc => tc.expectedOutput.trim())
-                    .map((testCase, index) => (
-                    <div key={index} className="bg-white p-3 rounded border">
-                      <div className="text-sm font-medium text-gray-900 mb-1">
-                        Test {index + 1}: {testCase.description || 'No description'}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        Expected: <code className="bg-gray-100 px-1 rounded">{testCase.expectedOutput}</code>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Hints Preview */}
-            {formData.content.hints.filter(hint => hint.trim()).length > 0 && (
-              <div>
-                <h3 className="font-medium text-gray-900 mb-2">Hints Available</h3>
-                <div className="space-y-1">
-                  {formData.content.hints
-                    .filter(hint => hint.trim())
-                    .map((hint, index) => (
-                    <div key={index} className="text-sm text-gray-600 bg-yellow-50 p-2 rounded">
-                      💡 {hint}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </Card>
-      )}
 
-      {/* Save button at bottom for easy access */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isLoading} size="lg">
-          <Save className="h-4 w-4 mr-2" />
-          {isLoading ? 'Creating Lesson...' : 'Create Lesson'}
-        </Button>
-      </div>
+        {/* Lessons List */}
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Lessons</h2>
+          
+          {lessons.length === 0 ? (
+            <Card className="p-8 text-center">
+              <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No lessons available</h3>
+              <p className="text-gray-600">
+                Lessons for this module are coming soon. Check back later!
+              </p>
+            </Card>
+          ) : (
+            lessons.map((lesson, index) => {
+              const isCompleted = lesson.userProgress?.status === 'completed'
+              const isInProgress = lesson.userProgress?.status === 'in_progress'
+              const isLocked = index > 0 && !lessons[index - 1]?.userProgress
+              
+              return (
+                <LessonCard
+                  key={lesson.id}
+                  lesson={lesson}
+                  isCompleted={isCompleted}
+                  isInProgress={isInProgress}
+                  isLocked={isLocked}
+                  moduleId={moduleId}
+                />
+              )
+            })
+          )}
+        </div>
+      </main>
     </div>
+  )
+}
+
+function LessonCard({ 
+  lesson, 
+  isCompleted, 
+  isInProgress, 
+  isLocked, 
+  moduleId 
+}: {
+  lesson: Lesson
+  isCompleted: boolean
+  isInProgress: boolean
+  isLocked: boolean
+  moduleId: string
+}) {
+  const difficultyColors = {
+    beginner: 'bg-green-100 text-green-800',
+    intermediate: 'bg-yellow-100 text-yellow-800',
+    advanced: 'bg-red-100 text-red-800'
+  }
+
+  const getStatusIcon = () => {
+    if (isCompleted) return <CheckCircle className="h-5 w-5 text-green-600" />
+    if (isLocked) return <Lock className="h-5 w-5 text-gray-400" />
+    return <Play className="h-5 w-5 text-blue-600" />
+  }
+
+  const getStatusText = () => {
+    if (isCompleted) return 'Completed'
+    if (isInProgress) return 'In Progress'
+    if (isLocked) return 'Locked'
+    return 'Start Lesson'
+  }
+
+  return (
+    <Card className={`p-6 transition-all duration-200 ${
+      isLocked ? 'opacity-60' : 'hover:shadow-lg cursor-pointer'
+    }`}>
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-lg font-bold text-gray-500">
+              {lesson.orderIndex}.
+            </span>
+            <h3 className="text-xl font-bold text-gray-900">{lesson.title}</h3>
+            <Badge className={difficultyColors[lesson.content.difficulty]}>
+              {lesson.content.difficulty}
+            </Badge>
+          </div>
+          
+          <p className="text-gray-600 mb-4 line-clamp-2">{lesson.description}</p>
+          
+          <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+            <div className="flex items-center gap-1">
+              <Clock className="h-4 w-4" />
+              <span>{lesson.content.estimatedTime} min</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Award className="h-4 w-4" />
+              <span>{lesson.xpReward} XP</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <BookOpen className="h-4 w-4" />
+              <span>{lesson.content.objectives.length} objectives</span>
+            </div>
+          </div>
+
+          {/* Progress indicator */}
+          {isCompleted && lesson.userProgress?.score && (
+            <div className="mb-4">
+              <div className="text-sm text-green-600 font-medium">
+                Score: {lesson.userProgress.score}%
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col items-end gap-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            {getStatusIcon()}
+            <span className={
+              isCompleted ? 'text-green-600' :
+              isLocked ? 'text-gray-400' :
+              'text-blue-600'
+            }>
+              {getStatusText()}
+            </span>
+          </div>
+          
+          {!isLocked && (
+            <Button asChild className="min-w-[120px]">
+              <Link href={`/learn/${moduleId}/${lesson.id}`}>
+                {isCompleted ? 'Review' : 'Start Lesson'}
+              </Link>
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
   )
 }

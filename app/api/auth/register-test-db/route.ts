@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       user: newUser
     }, { status: 201 })
     
-  } catch (error) {
+  } catch (error:any) {
     console.error('=== DATABASE TEST FAILED ===')
     console.error('Error type:', error.constructor.name)
     console.error('Error message:', error.message)

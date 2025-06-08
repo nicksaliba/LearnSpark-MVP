@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       }
     }, { status: 200 })
     
-  } catch (error) {
+  } catch (error:any) {
     console.error('=== REGISTRATION TEST FAILED ===')
     console.error('Error type:', error.constructor.name)
     console.error('Error message:', error.message)
