@@ -5,25 +5,46 @@ import React, { useCallback, useState, useMemo, useEffect } from 'react';
 import { Chessboard } from 'react-chessboard';
 import { ChessBoardProps, SquareStyles, Square, CustomPieceProps } from '../../types/chess';
 
-const ChessBoard: React.FC<ChessBoardProps> = ({ 
+interface ArrowData {
+  from: string;
+  to: string;
+  color: string;
+}
+
+interface ExtendedChessBoardProps extends ChessBoardProps {
+  arrows?: ArrowData[];
+}
+
+const ChessBoard: React.FC<ExtendedChessBoardProps> = ({ 
   position, 
   onMove, 
   moveHistory, 
   currentMoveIndex,
   orientation = 'white',
-  disabled = false
+  disabled = false,
+  arrows = []
 }) => {
   const [moveFrom, setMoveFrom] = useState<string>('');
   const [optionSquares, setOptionSquares] = useState<SquareStyles>({});
   const [boardKey, setBoardKey] = useState<number>(0);
   const [isMounted, setIsMounted] = useState(false);
+  const [localPosition, setLocalPosition] = useState<string>(position);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Update local position when prop changes
   useEffect(() => {
+    console.log('Position changed:', position);
+    setLocalPosition(position);
     setBoardKey(prev => prev + 1);
+  }, [position]);
+
+  // Clear move selection when position changes
+  useEffect(() => {
+    setMoveFrom('');
+    setOptionSquares({});
   }, [position]);
 
   // Get the last move for highlighting
@@ -54,8 +75,15 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
     return styles;
   }, [getLastMove]);
 
+  // Convert arrows to react-chessboard format
+  const chessboardArrows = useMemo(() => {
+    return arrows.map(arrow => [arrow.from, arrow.to, arrow.color]);
+  }, [arrows]);
+
   const handleSquareClick = useCallback((square: Square) => {
     if (disabled) return;
+
+    console.log('Square clicked:', square, 'moveFrom:', moveFrom);
 
     setOptionSquares({});
 
@@ -75,12 +103,16 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
       return;
     }
 
+    console.log('Attempting move from', moveFrom, 'to', square);
     const moveResult = onMove(moveFrom, square);
+    
+    console.log('Move result:', moveResult);
     
     if (moveResult) {
       setMoveFrom('');
       setOptionSquares({});
     } else {
+      // If move failed, select the new square
       setMoveFrom(square);
       setOptionSquares({
         [square]: {
@@ -93,7 +125,11 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
   const handlePieceDrop = useCallback((sourceSquare: string, targetSquare: string): boolean => {
     if (disabled) return false;
 
+    console.log('Piece dropped from', sourceSquare, 'to', targetSquare);
+    
     const moveResult = onMove(sourceSquare, targetSquare);
+    console.log('Drop move result:', moveResult);
+    
     setMoveFrom('');
     setOptionSquares({});
     return moveResult;
@@ -127,7 +163,7 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
   }, []);
 
   const positionInfo = useMemo(() => {
-    const parts = position.split(' ');
+    const parts = localPosition.split(' ');
     return {
       board: parts[0] || '',
       turn: parts[1] === 'w' ? 'White' : 'Black',
@@ -136,7 +172,7 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
       halfmove: parseInt(parts[4] || '0', 10),
       fullmove: parseInt(parts[5] || '1', 10)
     };
-  }, [position]);
+  }, [localPosition]);
 
   if (!isMounted) {
     return (
@@ -166,7 +202,7 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
       <div className="board-wrapper">
         <Chessboard
           key={boardKey}
-          position={position}
+          position={localPosition}
           onPieceDrop={handlePieceDrop}
           onSquareClick={handleSquareClick}
           customSquareStyles={customSquareStyles}
@@ -186,6 +222,8 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
           }}
           customPremoveDarkSquareStyle={{ backgroundColor: '#CF664E' }}
           customPremoveLightSquareStyle={{ backgroundColor: '#F7EC74' }}
+          customArrows={chessboardArrows}
+          customArrowColor="#rgb(255,170,0)"
         />
       </div>
       
@@ -201,6 +239,18 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
             <strong>Move:</strong> 
             <span>{currentMoveIndex} / {moveHistory.length}</span>
           </div>
+          <div className="info-row">
+            <strong>Position:</strong> 
+            <span className="fen-display" title={localPosition}>
+              {localPosition.split(' ')[0]}
+            </span>
+          </div>
+          {arrows.length > 0 && (
+            <div className="info-row">
+              <strong>Arrows:</strong> 
+              <span>{arrows.length} shown</span>
+            </div>
+          )}
           {positionInfo.castling !== '-' && (
             <div className="info-row">
               <strong>Castling:</strong> 
@@ -224,6 +274,11 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
           {moveFrom && !disabled && (
             <div className="status-message info">
               Selected: {moveFrom}
+            </div>
+          )}
+          {arrows.length > 0 && (
+            <div className="status-message success">
+              Showing {arrows.length} arrow{arrows.length !== 1 ? 's' : ''}
             </div>
           )}
         </div>

@@ -40,6 +40,9 @@ export const useChess = (initialFen?: string): UseChessReturn => {
   // Update game state whenever the chess position changes
   const updateGameState = useCallback((): void => {
     try {
+      const newPosition = chess.fen();
+      console.log('Updating game state, new position:', newPosition);
+      
       const isGameOver = chess.isGameOver();
       const isCheck = chess.inCheck();
       const isCheckmate = chess.isCheckmate();
@@ -74,7 +77,9 @@ export const useChess = (initialFen?: string): UseChessReturn => {
         winner
       });
 
-      setPosition(chess.fen());
+      // Update position state
+      setPosition(newPosition);
+      console.log('Position updated to:', newPosition);
     } catch (error) {
       console.error('Error updating game state:', error);
     }
@@ -91,13 +96,12 @@ export const useChess = (initialFen?: string): UseChessReturn => {
         if (!success) {
           console.warn('Failed to load initial FEN, using default');
           chess.reset();
-          updateGameState();
         }
       } else {
         console.log('Using default starting position');
         chess.reset();
-        updateGameState();
       }
+      updateGameState();
     } catch (error) {
       console.error('Error in useChess initialization:', error);
       // Fallback to default position
@@ -115,7 +119,12 @@ export const useChess = (initialFen?: string): UseChessReturn => {
     move: string | { from: string; to: string; promotion?: string }
   ): ChessMove | null => {
     try {
+      console.log('Making move:', move);
+      console.log('Current position before move:', chess.fen());
+      
       const moveResult = chess.move(move);
+      console.log('Move result:', moveResult);
+      
       if (moveResult) {
         const typedMove = moveResult as ChessMove;
         
@@ -123,12 +132,17 @@ export const useChess = (initialFen?: string): UseChessReturn => {
         const newHistory = [...moveHistory.slice(0, currentMoveIndex), typedMove];
         setMoveHistory(newHistory);
         setCurrentMoveIndex(newHistory.length);
+        
+        // Update game state and position
         updateGameState();
         
+        console.log('Move successful, new position:', chess.fen());
         return typedMove;
+      } else {
+        console.log('Move failed - invalid move');
       }
     } catch (error) {
-      console.error('Invalid move:', error);
+      console.error('Error making move:', error);
     }
     return null;
   }, [chess, moveHistory, currentMoveIndex, updateGameState]);
@@ -141,6 +155,8 @@ export const useChess = (initialFen?: string): UseChessReturn => {
     }
 
     try {
+      console.log('Going to move index:', moveIndex);
+      
       // Reset to starting position
       chess.reset();
       
@@ -158,6 +174,7 @@ export const useChess = (initialFen?: string): UseChessReturn => {
 
       setCurrentMoveIndex(moveIndex);
       updateGameState();
+      console.log('Successfully went to move', moveIndex, 'position:', chess.fen());
       return true;
     } catch (error) {
       console.error('Error navigating to move:', error);
@@ -205,6 +222,36 @@ export const useChess = (initialFen?: string): UseChessReturn => {
       }
     } catch (error) {
       console.error('Error loading position:', error, 'FEN:', fen);
+      return false;
+    }
+  }, [chess, updateGameState]);
+
+  // Load PGN
+  const loadPgn = useCallback((pgn: string): boolean => {
+    try {
+      console.log('Loading PGN:', pgn);
+      
+      // Reset the game first
+      chess.reset();
+      
+      // Load the PGN
+      const success = chess.loadPgn(pgn);
+      
+      if (success) {
+        // Get the move history
+        const history = chess.history({ verbose: true }) as ChessMove[];
+        setMoveHistory(history);
+        setCurrentMoveIndex(history.length);
+        updateGameState();
+        
+        console.log('PGN loaded successfully, moves:', history.length);
+        return true;
+      } else {
+        console.error('Failed to load PGN:', pgn);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error loading PGN:', error);
       return false;
     }
   }, [chess, updateGameState]);
@@ -269,6 +316,7 @@ export const useChess = (initialFen?: string): UseChessReturn => {
     goToMove,
     resetGame,
     loadPosition,
+    loadPgn,
     undoMove,
     redoMove,
     isLegalMove,
