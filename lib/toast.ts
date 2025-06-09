@@ -1,6 +1,5 @@
-// lib/toast.ts - Toast notification utilities
-import toast, { Toaster, ToastOptions } from 'react-hot-toast'
-import { CheckCircle, XCircle, AlertTriangle, Info, Loader2 } from 'lucide-react'
+// lib/toast.ts - Toast notification utilities (Fixed - No JSX)
+import toast, { ToastOptions } from 'react-hot-toast'
 
 // Default toast options
 const defaultOptions: ToastOptions = {
@@ -111,82 +110,61 @@ export const showToast = {
   dismissAll: () => toast.dismiss(),
 }
 
-// Progress toast for long operations
+// Progress toast for long operations (simplified without JSX)
 export const showProgressToast = (message: string, progress: number) => {
-  return toast(
-    (t) => (
-      <div className="flex items-center space-x-2">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <div className="flex-1">
-          <div className="text-sm font-medium">{message}</div>
-          <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-            />
-          </div>
-          <div className="text-xs text-gray-500 mt-1">{Math.round(progress)}%</div>
-        </div>
-      </div>
-    ),
-    {
-      duration: Infinity,
-      style: {
-        ...defaultOptions.style,
-        minWidth: '300px',
-      },
-    }
-  )
+  const progressText = `${message} - ${Math.round(progress)}%`
+  return toast.loading(progressText, {
+    duration: Infinity,
+    style: {
+      ...defaultOptions.style,
+      minWidth: '300px',
+    },
+  })
 }
 
-// Achievement toast (special styling)
+// Achievement toast (simplified without JSX)
 export const showAchievementToast = (
   title: string,
   description: string,
   xp: number
 ) => {
-  return toast(
-    (t) => (
-      <div className="flex items-center space-x-3">
-        <div className="flex-shrink-0">
-          <div className="w-10 h-10 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full flex items-center justify-center">
-            🏆
-          </div>
-        </div>
-        <div className="flex-1">
-          <div className="font-bold text-gray-900">{title}</div>
-          <div className="text-sm text-gray-600">{description}</div>
-          <div className="text-xs text-green-600 font-medium">+{xp} XP</div>
-        </div>
-      </div>
-    ),
-    {
-      duration: 8000,
-      style: {
-        ...defaultOptions.style,
-        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-        border: '2px solid #f59e0b',
-        minWidth: '320px',
-      },
-    }
-  )
+  const achievementText = `🏆 ${title}\n${description}\n+${xp} XP`
+  return toast.success(achievementText, {
+    duration: 8000,
+    style: {
+      ...defaultOptions.style,
+      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+      border: '2px solid #f59e0b',
+      minWidth: '320px',
+      whiteSpace: 'pre-line',
+    },
+  })
 }
 
-// Toaster component with custom configuration
-export const ToastProvider = () => (
-  <Toaster
-    position="top-right"
-    reverseOrder={false}
-    gutter={8}
-    containerClassName=""
-    containerStyle={{}}
-    toastOptions={{
-      className: '',
-      duration: 4000,
-      style: {
-        background: '#fff',
-        color: '#333',
-      },
-    }}
-  />
-)
+// Simple notification helpers
+export const notify = {
+  success: (message: string) => showToast.success(message),
+  error: (message: string) => showToast.error(message),
+  warning: (message: string) => showToast.warning(message),
+  info: (message: string) => showToast.info(message),
+  loading: (message: string) => showToast.loading(message),
+}
+
+// Progress update helper
+export const updateProgressToast = (toastId: string, message: string, progress: number) => {
+  toast.dismiss(toastId)
+  return showProgressToast(message, progress)
+}
+
+// Achievement notification with confetti effect
+export const celebrateAchievement = (title: string, description: string, xp: number) => {
+  // Show the toast
+  const toastId = showAchievementToast(title, description, xp)
+  
+  // Add some celebration logging for development
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`🎉 Achievement Unlocked: ${title} (+${xp} XP)`)
+  }
+  
+  return toastId
+}

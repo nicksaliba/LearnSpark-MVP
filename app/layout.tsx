@@ -1,8 +1,8 @@
-
-// app/layout.tsx - Updated layout
+// app/layout.tsx - Updated layout with toast support
 import type { Metadata } from 'next'
 import './globals.css'
 import { SessionWrapper } from '@/components/auth/session-wrapper'
+import { ToastProvider } from '@/components/providers/toast-provider'
 
 export const metadata: Metadata = {
   title: 'LearnSpark',
@@ -19,6 +19,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
         <SessionWrapper>
           {children}
+          <ToastProvider />
         </SessionWrapper>
       </body>
     </html>

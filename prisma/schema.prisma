@@ -23,6 +23,10 @@ model User {
   progress      UserProgress[]
   achievements  UserAchievement[]
   
+  @@index([email])
+  @@index([xpTotal])
+  @@index([level])
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -37,7 +41,12 @@ model Lesson {
   createdAt   DateTime  @default(now()) @map("created_at")
   
   progress    UserProgress[]
-  
+
+  @@index([module])
+  @@index([module, orderIndex])
+  @@index([orderIndex])
+  @@index([createdAt])
+  @@unique([module, orderIndex])
   @@map("lessons")
 }
 
@@ -56,6 +65,12 @@ model UserProgress {
   lesson           Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   
   @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
+  @@index([status])
+  @@index([userId, status])
+  @@index([completedAt])
+  @@index([createdAt])
   @@map("user_progress")
 }
 
@@ -70,6 +85,8 @@ model Achievement {
   
   userAchievements UserAchievement[]
   
+  @@index([name])
+  @@index([createdAt])
   @@map("achievements")
 }
 
@@ -83,5 +100,8 @@ model UserAchievement {
   achievement   Achievement  @relation(fields: [achievementId], references: [id], onDelete: Cascade)
   
   @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
+  @@index([earnedAt])
   @@map("user_achievements")
 }

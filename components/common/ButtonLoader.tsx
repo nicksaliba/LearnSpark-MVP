@@ -1,5 +1,7 @@
 
 // components/common/ButtonLoader.tsx
+import { Loader2 } from 'lucide-react'
+
 interface ButtonLoaderProps {
   isLoading: boolean
   children: React.ReactNode
