@@ -1,0 +1,152 @@
+/* app/chess-puzzles/page.css */
+
+.chess-puzzles-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  position: relative;
+  overflow-x: hidden;
+}
+
+.chess-puzzles-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.page-header {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 40px 20px 20px 20px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.header-content h1 {
+  margin: 0 0 12px 0;
+  font-size: 3rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ffffff, #f8f9fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+}
+
+.header-content p {
+  margin: 0;
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Chess piece floating animation */
+.chess-puzzles-page::after {
+  content: '♔♕♖♗♘♙';
+  position: absolute;
+  top: 10%;
+  right: 5%;
+  font-size: 2rem;
+  color: rgba(255, 255, 255, 0.1);
+  animation: float 6s ease-in-out infinite;
+  pointer-events: none;
+  letter-spacing: 10px;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+    opacity: 0.1;
+  }
+  25% {
+    transform: translateY(-10px) rotate(2deg);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(-20px) rotate(-1deg);
+    opacity: 0.3;
+  }
+  75% {
+    transform: translateY(-10px) rotate(1deg);
+    opacity: 0.2;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .page-header {
+    padding: 20px 15px 15px 15px;
+  }
+
+  .header-content h1 {
+    font-size: 2.5rem;
+  }
+
+  .header-content p {
+    font-size: 1rem;
+  }
+
+  .chess-puzzles-page::after {
+    font-size: 1.5rem;
+    right: 2%;
+    letter-spacing: 5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-content h1 {
+    font-size: 2rem;
+  }
+
+  .header-content p {
+    font-size: 0.9rem;
+  }
+
+  .chess-puzzles-page::after {
+    display: none;
+  }
+}
+
+/* Loading states specific to puzzles page */
+.puzzle-loading {
+  position: relative;
+  z-index: 2;
+}
+
+.loading-container {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .chess-puzzles-page {
+    background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+  }
+
+  .header-content h1 {
+    background: linear-gradient(135deg, #e2e8f0, #cbd5e0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header-content p {
+    color: rgba(226, 232, 240, 0.9);
+  }
+
+  .loading-container {
+    background: rgba(45, 55, 72, 0.95);
+    color: #e2e8f0;
+  }
+}

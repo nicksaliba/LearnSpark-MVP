@@ -6,10 +6,15 @@ import { ChessStudy, ChessChapter } from '../../types/chess';
 import { PGNParser, validateAndParsePGN } from '../../utils/pgnParser';
 import { createNewStudy, generateId } from '../../utils/chessUtils';
 
-interface StudyManagerPageProps {
+interface StudyManagerProps {
   studies: ChessStudy[];
-  onStudiesUpdate: (studies: ChessStudy[]) => void;
-  onNavigateToEditor: (study: ChessStudy) => void;
+  currentStudy: ChessStudy | null;
+  onStudySelect: (study: ChessStudy) => void;
+  onCreateStudy: (studyData: CreateStudyData) => void;
+  onDeleteStudy?: (studyId: string) => void;
+  onUpdateStudy?: (studyId: string, updates: Partial<ChessStudy>) => void;
+  // ADD THIS LINE:
+  onLoadPuzzles?: (puzzles: any[]) => void;
 }
 
 interface PGNImportResult {

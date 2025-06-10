@@ -1,0 +1,378 @@
+/* components/chess/ChessPuzzleManager.css */
+
+.chess-puzzle-manager {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 2px solid #e9ecef;
+}
+
+.puzzle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f1f3f4;
+}
+
+.puzzle-title-section {
+  flex: 1;
+}
+
+.puzzle-title {
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.title-edit-input {
+  width: 100%;
+  border: 2px solid #007bff;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  background: #f8f9ff;
+}
+
+.puzzle-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.difficulty-badge {
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.theme-tag {
+  background: #e9ecef;
+  color: #495057;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.instructor-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.edit-toggle {
+  padding: 8px 16px;
+  background: #f8f9fa;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.edit-toggle.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.edit-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.puzzle-navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.puzzle-selector {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-btn {
+  padding: 8px 16px;
+  background: white;
+  border: 2px solid #dee2e6;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.nav-btn:hover:not(:disabled) {
+  background: #e9ecef;
+  transform: translateY(-1px);
+}
+
+.nav-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.puzzle-counter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #495057;
+}
+
+.current-puzzle {
+  color: #007bff;
+  font-size: 1.3rem;
+}
+
+.puzzle-quick-selector {
+  min-width: 200px;
+}
+
+.puzzle-dropdown {
+  width: 100%;
+  padding: 8px 12px;
+  border: 2px solid #dee2e6;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+
+.puzzle-description {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-left: 4px solid #007bff;
+  border-radius: 0 8px 8px 0;
+}
+
+.puzzle-description p {
+  margin: 0;
+  color: #495057;
+  line-height: 1.6;
+}
+
+.description-edit-input {
+  width: 100%;
+  border: 2px solid #007bff;
+  border-radius: 6px;
+  padding: 12px;
+  font-family: inherit;
+  resize: vertical;
+  background: #f8f9ff;
+}
+
+.variation-controls {
+  margin-bottom: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  border-radius: 12px;
+  border: 1px solid #dee2e6;
+}
+
+.view-mode-selector {
+  margin-bottom: 20px;
+}
+
+.view-mode-selector h4 {
+  margin: 0 0 12px 0;
+  color: #495057;
+  font-size: 1rem;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-btn {
+  padding: 8px 16px;
+  background: white;
+  border: 2px solid #dee2e6;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.mode-btn.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.mode-btn:hover {
+  border-color: #007bff;
+  background: #f8f9ff;
+}
+
+.mode-btn.active:hover {
+  background: #0056b3;
+}
+
+.puzzle-statistics {
+  margin-top: 16px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.stat-item {
+  text-align: center;
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #007bff;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: #6c757d;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.student-instructions {
+  margin-top: 20px;
+  padding: 16px;
+  background: linear-gradient(135deg, #e8f5e8, #d4edda);
+  border: 2px solid #28a745;
+  border-radius: 8px;
+}
+
+.student-instructions h4 {
+  margin: 0 0 8px 0;
+  color: #155724;
+}
+
+.student-instructions p {
+  margin: 0 0 12px 0;
+  color: #155724;
+  line-height: 1.5;
+}
+
+.required-count {
+  background: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+  font-weight: 600;
+}
+
+.puzzle-manager-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px dashed #dee2e6;
+}
+
+.empty-state {
+  text-align: center;
+  color: #6c757d;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  color: #495057;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .chess-puzzle-manager {
+    padding: 16px;
+  }
+
+  .puzzle-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .puzzle-navigation {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .puzzle-selector {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mode-buttons {
+    flex-direction: column;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .puzzle-counter {
+    font-size: 1rem;
+  }
+
+  .current-puzzle {
+    font-size: 1.2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .puzzle-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-buttons {
+    width: 100%;
+  }
+
+  .mode-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
