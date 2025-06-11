@@ -25,6 +25,8 @@ interface HorizontalVariationTreeProps {
   currentMoveId?: string;
   onMoveClick: (nodeId: string, fen: string) => void;
   onToggleRequired?: (nodeId: string, required: boolean) => void;
+  onToggleHintable?: (nodeId: string) => void;
+  hintableNodes?: Set<string>;
   isInstructor?: boolean;
   showOnlyRequired?: boolean;
   maxDepth?: number;
@@ -36,6 +38,8 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
   currentMoveId,
   onMoveClick,
   onToggleRequired,
+  onToggleHintable,
+  hintableNodes = new Set(),
   isInstructor = false,
   showOnlyRequired = false,
   maxDepth = 10,
@@ -48,24 +52,12 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
   const variationTree = useMemo(() => {
     if (variations.length === 0) return [];
 
-    // Create a map for quick lookup
-    const nodeMap = new Map<string, VariationNode>();
-    variations.forEach(node => nodeMap.set(node.id, node));
-
-    // Build the tree structure
-    const roots: VariationNode[] = [];
-    const processedNodes = new Set<string>();
-
-    // Find root nodes (nodes without parents or whose parents aren't in the set)
-    variations.forEach(node => {
-      if (!node.parent || !nodeMap.has(node.parent)) {
-        roots.push(node);
-      }
-    });
+    // Find root nodes (nodes without parents)
+    const roots = variations.filter(node => !node.parent);
 
     // If no clear roots, use the first node as root
     if (roots.length === 0 && variations.length > 0) {
-      roots.push(variations[0]);
+      return [variations[0]];
     }
 
     return roots;
@@ -112,6 +104,7 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
     const hasChildren = node.children && node.children.length > 0;
     const isMainLine = node.isMainLine;
     const isRequired = node.isRequired;
+    const isHintable = hintableNodes.has(node.id);
 
     return (
       <div
@@ -122,7 +115,7 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
         <div
           className={`variation-node ${isMainLine ? 'main-line' : 'side-line'} ${
             isCurrent ? 'current' : ''
-          } ${isHovered ? 'hovered' : ''} ${isRequired ? 'required' : ''}`}
+          } ${isHovered ? 'hovered' : ''} ${isRequired ? 'required' : ''} ${isHintable ? 'hintable' : ''}`}
           onMouseEnter={() => setHoveredNode(node.id)}
           onMouseLeave={() => setHoveredNode(null)}
         >
@@ -157,6 +150,19 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
               >
                 {isRequired ? '★' : '☆'}
               </button>
+              
+              {onToggleHintable && (
+                <button
+                  className={`hint-toggle ${isHintable ? 'hintable' : 'not-hintable'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleHintable(node.id);
+                  }}
+                  title={isHintable ? 'Remove from hints' : 'Add to hints'}
+                >
+                  {isHintable ? '💡' : '🔒'}
+                </button>
+              )}
             </div>
           )}
 
@@ -180,6 +186,13 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
               ★
             </div>
           )}
+          
+          {/* Hintable Badge for Students */}
+          {!isInstructor && isHintable && (
+            <div className="hint-badge" title="This move can be revealed as a hint">
+              💡
+            </div>
+          )}
         </div>
 
         {/* Annotation */}
@@ -190,7 +203,7 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
         )}
 
         {/* Children Branches */}
-        {hasChildren && isExpanded && (
+        {hasChildren && isExpanded && node.children.length > 0 && (
           <div className="variation-children">
             {node.children.map((child, index) => (
               <div key={child.id} className="child-branch">
@@ -209,7 +222,9 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
     isInstructor,
     onMoveClick,
     toggleBranch,
-    handleToggleRequired
+    handleToggleRequired,
+    onToggleHintable,
+    hintableNodes
   ]);
 
   const variationStats = useMemo(() => {
@@ -317,30 +332,42 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
             <span>Variation</span>
           </div>
           {isInstructor && (
-            <div className="legend-item">
-              <div className="legend-icon required"></div>
-              <span>Required (★)</span>
-            </div>
+            <>
+              <div className="legend-item">
+                <div className="legend-icon required"></div>
+                <span>Required (★)</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-icon hintable"></div>
+                <span>Hintable (💡)</span>
+              </div>
+            </>
           )}
           {!isInstructor && (
-            <div className="legend-item">
-              <div className="legend-icon required"></div>
-              <span>Study This (★)</span>
-            </div>
+            <>
+              <div className="legend-item">
+                <div className="legend-icon required"></div>
+                <span>Study This (★)</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-icon revealed"></div>
+                <span>Your Moves</span>
+              </div>
+            </>
           )}
         </div>
 
         {/* Instructor Instructions */}
         {isInstructor && (
           <div className="instructor-hint">
-            💡 Click the star (☆) to mark variations as required for students
+            💡 Click the star (☆/★) to mark variations as required, and the lightbulb (🔒/💡) to make moves hintable
           </div>
         )}
 
         {/* Student Instructions */}
         {!isInstructor && variationStats.required > 0 && (
           <div className="student-hint">
-            🎯 Focus on starred (★) variations - these are essential for this puzzle
+            🎯 The tree reveals as you play! Starred (★) variations are essential to solve the puzzle
           </div>
         )}
       </div>
@@ -456,6 +483,11 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
           box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
         }
 
+        .variation-node.hintable {
+          border: 2px solid #17a2b8;
+          background: linear-gradient(135deg, #f0ffff, #e6f7ff);
+        }
+
         .variation-node.current {
           background: linear-gradient(135deg, #e3f2fd, #bbdefb) !important;
           border-color: #2196f3 !important;
@@ -543,6 +575,46 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
 
         .required-toggle:hover {
           transform: scale(1.1);
+        }
+
+        .hint-toggle {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          border: none;
+          cursor: pointer;
+          font-size: 12px;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-left: 4px;
+        }
+
+        .hint-toggle.hintable {
+          background: linear-gradient(135deg, #17a2b8, #138496);
+          box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3);
+        }
+
+        .hint-toggle.not-hintable {
+          background: #f8f9fa;
+          border: 1px solid #dee2e6;
+        }
+
+        .hint-toggle:hover {
+          transform: scale(1.1);
+        }
+
+        .hint-badge {
+          background: linear-gradient(135deg, #17a2b8, #138496);
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          margin-left: 4px;
         }
 
         .branch-toggle {
@@ -694,6 +766,25 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
           transform: translate(-50%, -50%);
           color: white;
           font-size: 8px;
+        }
+
+        .legend-icon.hintable {
+          background: linear-gradient(135deg, #17a2b8, #138496);
+          position: relative;
+        }
+
+        .legend-icon.hintable::after {
+          content: '💡';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-size: 8px;
+        }
+
+        .legend-icon.revealed {
+          background: linear-gradient(135deg, #28a745, #20c997);
+          border: 2px solid #155724;
         }
 
         .instructor-hint {

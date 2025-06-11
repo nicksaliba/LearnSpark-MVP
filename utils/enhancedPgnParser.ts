@@ -13,6 +13,8 @@ export interface VariationNode {
   isRequired?: boolean;
   annotation?: string;
   evaluation?: string;
+  moveNumber: number;
+  color: 'w' | 'b';
 }
 
 export interface ChessPuzzle {
@@ -94,9 +96,6 @@ export class EnhancedPGNParser {
     chess: Chess,
     startFen?: string
   ): VariationNode[] {
-    const variations: VariationNode[] = [];
-    let nodeCounter = 0;
-
     // Reset chess to starting position
     if (startFen) {
       chess.load(startFen);
@@ -108,9 +107,13 @@ export class EnhancedPGNParser {
     const cleanPgn = this.cleanPgnForParsing(pgnText);
     const tokens = this.tokenizePgn(cleanPgn);
     
-    this.parseTokensToVariations(tokens, chess, variations, 0, true, null);
+    // Build the tree structure
+    const rootNodes: VariationNode[] = [];
+    const allNodes: VariationNode[] = [];
     
-    return variations;
+    this.parseTokensToTree(tokens, chess, rootNodes, allNodes, 0, true, null);
+    
+    return allNodes;
   }
 
   private static cleanPgnForParsing(pgn: string): string {
@@ -125,13 +128,10 @@ export class EnhancedPGNParser {
     const tokens: string[] = [];
     let current = '';
     let inComment = false;
-    let inVariation = false;
     let braceLevel = 0;
-    let parenLevel = 0;
 
     for (let i = 0; i < pgn.length; i++) {
       const char = pgn[i];
-      const nextChar = pgn[i + 1];
 
       if (char === '{') {
         if (current.trim()) {
@@ -149,25 +149,7 @@ export class EnhancedPGNParser {
           tokens.push(current.trim());
           current = '';
         }
-      } else if (char === '(') {
-        if (current.trim()) {
-          tokens.push(current.trim());
-          current = '';
-        }
-        inVariation = true;
-        parenLevel++;
-        tokens.push('(');
-      } else if (char === ')') {
-        if (current.trim()) {
-          tokens.push(current.trim());
-          current = '';
-        }
-        parenLevel--;
-        if (parenLevel === 0) {
-          inVariation = false;
-        }
-        tokens.push(')');
-      } else if (!inComment && !inVariation && /\s/.test(char)) {
+      } else if (!inComment && /\s/.test(char)) {
         if (current.trim()) {
           tokens.push(current.trim());
           current = '';
@@ -184,31 +166,44 @@ export class EnhancedPGNParser {
     return tokens.filter(token => token.length > 0);
   }
 
-  private static parseTokensToVariations(
+  private static parseTokensToTree(
     tokens: string[],
     chess: Chess,
-    variations: VariationNode[],
+    currentBranch: VariationNode[],
+    allNodes: VariationNode[],
     depth: number,
     isMainLine: boolean,
-    parentId: string | null
-  ): void {
+    parentNode: VariationNode | null
+  ): number {
     let i = 0;
+    let lastNode: VariationNode | null = parentNode;
     
     while (i < tokens.length) {
       const token = tokens[i];
 
       if (token === '(') {
-        // Start of variation - save current position
-        const savedFen = chess.fen();
-        i++;
+        // Start of variation - need to go back one move
+        if (lastNode && lastNode.parent) {
+          // Find the parent node
+          const parentNodeObj = allNodes.find(n => n.id === lastNode!.parent);
+          if (parentNodeObj) {
+            // Restore position to parent's position
+            chess.load(parentNodeObj.fen);
+          }
+        } else if (lastNode) {
+          // Go back one move from current position
+          chess.undo();
+        }
         
-        // Parse variation
+        i++; // Skip the '('
+        
+        // Collect variation tokens
         const variationTokens: string[] = [];
         let parenLevel = 1;
         
         while (i < tokens.length && parenLevel > 0) {
           if (tokens[i] === '(') parenLevel++;
-          if (tokens[i] === ')') parenLevel--;
+          else if (tokens[i] === ')') parenLevel--;
           
           if (parenLevel > 0) {
             variationTokens.push(tokens[i]);
@@ -217,22 +212,35 @@ export class EnhancedPGNParser {
         }
         
         // Parse the variation recursively
-        this.parseTokensToVariations(
+        const parentForVariation = lastNode?.parent ? 
+          allNodes.find(n => n.id === lastNode!.parent) : null;
+        
+        const variationBranch: VariationNode[] = [];
+        this.parseTokensToTree(
           variationTokens, 
           chess, 
-          variations, 
+          variationBranch,
+          allNodes,
           depth + 1, 
           false, 
-          parentId
+          parentForVariation
         );
         
+        // Add variation nodes as children of the parent
+        if (parentForVariation && variationBranch.length > 0) {
+          parentForVariation.children.push(...variationBranch);
+        }
+        
         // Restore position after variation
-        chess.load(savedFen);
+        if (lastNode) {
+          chess.load(lastNode.fen);
+        }
+        
         continue;
       }
 
       if (token === ')') {
-        break;
+        return i;
       }
 
       // Skip move numbers
@@ -247,8 +255,9 @@ export class EnhancedPGNParser {
         continue;
       }
 
-      // Skip comments for now (could be parsed for annotations)
+      // Skip comments for now (will be handled after move)
       if (token.startsWith('{') && token.endsWith('}')) {
+        // This is handled after a move is made
         i++;
         continue;
       }
@@ -258,33 +267,47 @@ export class EnhancedPGNParser {
         const move = chess.move(token);
         if (move) {
           const nodeId = this.generateId();
-          const variation: VariationNode = {
+          const moveNumber = Math.floor((chess.history().length - 1) / 2) + 1;
+          
+          const node: VariationNode = {
             id: nodeId,
             move: move,
             notation: move.san,
             fen: chess.fen(),
             children: [],
-            parent: parentId,
+            parent: lastNode?.id,
             depth: depth,
-            isMainLine: isMainLine,
-            isRequired: isMainLine, // Main line moves are required by default
+            isMainLine: isMainLine && depth === 0,
+            isRequired: isMainLine && depth === 0,
+            moveNumber: moveNumber,
+            color: move.color
           };
 
-          // Look ahead for annotations
-          if (i + 1 < tokens.length && tokens[i + 1].startsWith('{')) {
-            const comment = tokens[i + 1];
-            variation.annotation = comment.slice(1, -1); // Remove braces
+          // Look ahead for annotation
+          if (i + 1 < tokens.length && tokens[i + 1].startsWith('{') && tokens[i + 1].endsWith('}')) {
+            node.annotation = tokens[i + 1].slice(1, -1);
+            i++; // Skip the annotation token
           }
 
-          variations.push(variation);
-          parentId = nodeId;
+          // Add node to the current branch
+          currentBranch.push(node);
+          allNodes.push(node);
+          
+          // If this node has a parent, add it to parent's children
+          if (lastNode) {
+            lastNode.children.push(node);
+          }
+          
+          lastNode = node;
         }
       } catch (error) {
-        console.warn('Failed to parse move:', token);
+        console.warn('Failed to parse move:', token, error);
       }
 
       i++;
     }
+    
+    return i;
   }
 
   static parse(pgnText: string): ParsedPGNWithVariations {
@@ -433,7 +456,7 @@ export class EnhancedPGNParser {
   private static extractAnnotations(variations: VariationNode[]): Record<string, string> {
     const annotations: Record<string, string> = {};
     
-    variations.forEach((variation, index) => {
+    variations.forEach((variation) => {
       if (variation.annotation) {
         annotations[variation.id] = variation.annotation;
       }
@@ -504,30 +527,55 @@ export class EnhancedPGNParser {
       pgn += `[Themes "${puzzle.themes.join(', ')}"]\n`;
       pgn += '\n';
 
-      // Moves
-      let moveNumber = 1;
-      let isWhiteMove = true;
-      
-      puzzle.variations.filter(v => v.isMainLine).forEach((variation, moveIndex) => {
-        if (isWhiteMove) {
-          pgn += `${moveNumber}. `;
-        } else {
-          pgn += '... ';
+      // Moves - this needs to handle the tree structure
+      const writePgnMoves = (nodes: VariationNode[], moveNumber: number, isWhite: boolean): string => {
+        let pgnStr = '';
+        let currentMoveNumber = moveNumber;
+        let currentIsWhite = isWhite;
+        
+        for (const node of nodes) {
+          if (currentIsWhite) {
+            pgnStr += `${currentMoveNumber}. `;
+          }
+          
+          pgnStr += node.notation;
+          
+          if (node.annotation) {
+            pgnStr += ` {${node.annotation}}`;
+          }
+          
+          // Handle variations (children that are not main line)
+          const variations = node.children.filter(child => !child.isMainLine);
+          for (const variation of variations) {
+            pgnStr += ' (';
+            if (!currentIsWhite) {
+              pgnStr += `${currentMoveNumber}... `;
+            }
+            pgnStr += writePgnMoves([variation, ...variation.children], currentMoveNumber, !currentIsWhite);
+            pgnStr += ')';
+          }
+          
+          pgnStr += ' ';
+          
+          if (!currentIsWhite) {
+            currentMoveNumber++;
+          }
+          currentIsWhite = !currentIsWhite;
+          
+          // Continue with main line
+          const mainLineChild = node.children.find(child => child.isMainLine);
+          if (mainLineChild) {
+            pgnStr += writePgnMoves([mainLineChild], currentMoveNumber, currentIsWhite);
+            break; // Main line continues in recursion
+          }
         }
         
-        pgn += variation.notation;
-        
-        if (variation.annotation) {
-          pgn += ` {${variation.annotation}}`;
-        }
-        
-        pgn += ' ';
-        
-        if (!isWhiteMove) {
-          moveNumber++;
-        }
-        isWhiteMove = !isWhiteMove;
-      });
+        return pgnStr;
+      };
+
+      // Get root nodes (nodes without parents)
+      const rootNodes = puzzle.variations.filter(v => !v.parent);
+      pgn += writePgnMoves(rootNodes, 1, true);
 
       pgn += puzzle.metadata.result || '*';
       pgn += '\n\n';

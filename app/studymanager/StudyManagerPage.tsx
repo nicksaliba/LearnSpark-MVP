@@ -2,11 +2,11 @@
 'use client';
 
 import React, { useState, useCallback, useRef } from 'react';
-import { ChessStudy, ChessChapter } from '../../types/chess';
+import { ChessStudy, ChessChapter,CreateStudyData } from '../../types/chess';
 import { PGNParser, validateAndParsePGN } from '../../utils/pgnParser';
 import { createNewStudy, generateId } from '../../utils/chessUtils';
 
-interface StudyManagerProps {
+interface StudyManagerPageProps {
   studies: ChessStudy[];
   currentStudy: ChessStudy | null;
   onStudySelect: (study: ChessStudy) => void;
