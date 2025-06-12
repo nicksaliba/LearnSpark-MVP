@@ -1,0 +1,153 @@
+import { ChessPuzzle } from './types';
+
+export const samplePuzzleData: ChessPuzzle = {
+  id: "puzzle-1",
+  title: "Italian Game - Tactical Puzzle",
+  description: "Find the best continuation for White in this Italian Game position",
+  fen: "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 4",
+  difficulty: "intermediate",
+  themes: ["tactics", "italian-game", "fork"],
+  solution: ["Ng5", "d6", "Nxf7", "Kxf7", "Qf3+"],
+  requiredVariations: ["move-1", "move-2", "move-3", "move-4", "move-5", "move-6", "move-7"],
+  annotations: {
+    "move-3": "Attacking f7, the key tactical blow!",
+    "move-5": "Royal fork! The king and queen are both attacked.",
+    "move-7": "Winning the queen with check!",
+    "move-alt1": "Passive defense",
+    "move-alt2": "Trying to defend f7"
+  },
+  metadata: {
+    source: "Chess.com",
+    date: "2024-01-15",
+    white: "Student",
+    black: "Computer",
+    event: "Tactical Training",
+    result: "*",
+    eco: "C50",
+    opening: "Italian Game"
+  },
+  variations: [
+    {
+      id: "move-1",
+      move: { from: "g1", to: "f3", san: "Nf3" },
+      notation: "Nf3",
+      fen: "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 4",
+      children: ["move-2", "move-alt1"],
+      parent: null,
+      depth: 0,
+      isMainLine: true,
+      isRequired: true,
+      moveNumber: 4,
+      color: "w"
+    },
+    {
+      id: "move-2",
+      move: { from: "g8", to: "f6", san: "Nf6" },
+      notation: "Nf6",
+      fen: "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R b KQkq - 1 4",
+      children: ["move-3", "move-alt2"],
+      parent: "move-1",
+      depth: 1,
+      isMainLine: true,
+      isRequired: true,
+      moveNumber: 4,
+      color: "b"
+    },
+    {
+      id: "move-3",
+      move: { from: "f3", to: "g5", san: "Ng5" },
+      notation: "Ng5",
+      fen: "r1bqkb1r/pppp1ppp/2n2n2/4p1N1/2B1P3/3P4/PPP2PPP/RNBQK2R b KQkq - 2 4",
+      children: ["move-4"],
+      parent: "move-2",
+      depth: 2,
+      isMainLine: true,
+      isRequired: true,
+      moveNumber: 5,
+      color: "w",
+      annotation: "Attacking f7, the key tactical blow!"
+    },
+    {
+      id: "move-4",
+      move: { from: "d7", to: "d6", san: "d6" },
+      notation: "d6",
+      fen: "r1bqkb1r/ppp2ppp/2np1n2/4p1N1/2B1P3/3P4/PPP2PPP/RNBQK2R w KQkq - 0 5",
+      children: ["move-5"],
+      parent: "move-3",
+      depth: 3,
+      isMainLine: true,
+      isRequired: true,
+      moveNumber: 5,
+      color: "b"
+    },
+    {
+      id: "move-5",
+      move: { from: "g5", to: "f7", san: "Nxf7" },
+      notation: "Nxf7",
+      fen: "r1bqkb1r/ppp2Npp/2np1n2/4p3/2B1P3/3P4/PPP2PPP/RNBQK2R b KQkq - 0 5",
+      children: ["move-6"],
+      parent: "move-4",
+      depth: 4,
+      isMainLine: true,
+      isRequired: true,
+      moveNumber: 6,
+      color: "w",
+      annotation: "Royal fork! The king and queen are both attacked."
+    },
+    {
+      id: "move-6",
+      move: { from: "e8", to: "f7", san: "Kxf7" },
+      notation: "Kxf7",
+      fen: "r1bqkb1r/ppp2kpp/2np1n2/4p3/2B1P3/3P4/PPP2PPP/RNBQK2R w KQkq - 0 6",
+      children: ["move-7"],
+      parent: "move-5",
+      depth: 5,
+      isMainLine: true,
+      isRequired: true,
+      moveNumber: 6,
+      color: "b"
+    },
+    {
+      id: "move-7",
+      move: { from: "d1", to: "f3", san: "Qf3+" },
+      notation: "Qf3+",
+      fen: "r1bqkb1r/ppp2kpp/2np1n2/4p3/2B1P3/3P1Q2/PPP2PPP/RNB1K2R b KQ - 1 6",
+      children: [],
+      parent: "move-6",
+      depth: 6,
+      isMainLine: true,
+      isRequired: true,
+      moveNumber: 7,
+      color: "w",
+      annotation: "Winning the queen with check!"
+    },
+    {
+      id: "move-alt1",
+      move: { from: "d7", to: "d6", san: "d6" },
+      notation: "d6",
+      fen: "r1bqkb1r/ppp2ppp/2np1n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 5",
+      children: [],
+      parent: "move-1",
+      depth: 1,
+      isMainLine: false,
+      isRequired: false,
+      moveNumber: 4,
+      color: "b",
+      annotation: "Passive defense"
+    },
+    {
+      id: "move-alt2",
+      move: { from: "c8", to: "e6", san: "Be6" },
+      notation: "Be6",
+      fen: "r2qkb1r/pppp1ppp/2n1bn2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 1 5",
+      children: [],
+      parent: "move-2",
+      depth: 2,
+      isMainLine: false,
+      isRequired: false,
+      moveNumber: 5,
+      color: "b",
+      annotation: "Trying to defend f7"
+    }
+  ]
+};
