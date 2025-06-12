@@ -1,95 +1,283 @@
-// components/chess/HorizontalVariationTree.tsx
 'use client';
+import React, { useState, useCallback, useMemo } from 'react';
 
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { ChessMove } from '../../types/chess';
-import '../../styles/HorizontalVariationTree.css';
+// Sample data structure for chess variations
+const sampleVariations = [
+  {
+    id: 'start',
+    move: null,
+    notation: 'Start',
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    children: ['e4'],
+    parent: null,
+    depth: 0,
+    isMainLine: true,
+    isRequired: true,
+    moveNumber: 0,
+    color: 'w'
+  },
+  {
+    id: 'e4',
+    move: { from: 'e2', to: 'e4', san: 'e4' },
+    notation: 'e4',
+    fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+    children: ['e5', 'c5', 'e6', 'd5'],
+    parent: 'start',
+    depth: 1,
+    isMainLine: true,
+    isRequired: true,
+    moveNumber: 1,
+    color: 'w'
+  },
+  {
+    id: 'e5',
+    move: { from: 'e7', to: 'e5', san: 'e5' },
+    notation: 'e5',
+    fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+    children: ['nf3', 'd4-center', 'nc3-vienna'],
+    parent: 'e4',
+    depth: 2,
+    isMainLine: true,
+    isRequired: true,
+    moveNumber: 1,
+    color: 'b'
+  },
+  {
+    id: 'c5',
+    move: { from: 'c7', to: 'c5', san: 'c5' },
+    notation: 'c5',
+    fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
+    children: ['nf3-sicilian'],
+    parent: 'e4',
+    depth: 2,
+    isMainLine: false,
+    isRequired: false,
+    moveNumber: 1,
+    color: 'b'
+  },
+  {
+    id: 'e6',
+    move: { from: 'e7', to: 'e6', san: 'e6' },
+    notation: 'e6',
+    fen: 'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+    children: ['d4-french'],
+    parent: 'e4',
+    depth: 2,
+    isMainLine: false,
+    isRequired: false,
+    moveNumber: 1,
+    color: 'b'
+  },
+  {
+    id: 'd5',
+    move: { from: 'd7', to: 'd5', san: 'd5' },
+    notation: 'd5',
+    fen: 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2',
+    children: ['exd5'],
+    parent: 'e4',
+    depth: 2,
+    isMainLine: false,
+    isRequired: false,
+    moveNumber: 1,
+    color: 'b'
+  },
+  {
+    id: 'nf3',
+    move: { from: 'g1', to: 'f3', san: 'Nf3' },
+    notation: 'Nf3',
+    fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+    children: ['nc6', 'd6-philidor', 'nf6-petrov'],
+    parent: 'e5',
+    depth: 3,
+    isMainLine: true,
+    isRequired: true,
+    moveNumber: 2,
+    color: 'w'
+  },
+  {
+    id: 'd4-center',
+    move: { from: 'd2', to: 'd4', san: 'd4' },
+    notation: 'd4',
+    fen: 'rnbqkbnr/pppp1ppp/8/4p3/3PP3/8/PPP2PPP/RNBQKBNR b KQkq d3 0 2',
+    children: ['exd4'],
+    parent: 'e5',
+    depth: 3,
+    isMainLine: false,
+    isRequired: false,
+    moveNumber: 2,
+    color: 'w',
+    annotation: 'Center Game - direct confrontation'
+  },
+  {
+    id: 'nc3-vienna',
+    move: { from: 'b1', to: 'c3', san: 'Nc3' },
+    notation: 'Nc3',
+    fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 1 2',
+    children: ['nc6-vienna'],
+    parent: 'e5',
+    depth: 3,
+    isMainLine: false,
+    isRequired: false,
+    moveNumber: 2,
+    color: 'w',
+    annotation: 'Vienna Game - flexible development'
+  },
+  {
+    id: 'nc6',
+    move: { from: 'b8', to: 'c6', san: 'Nc6' },
+    notation: 'Nc6',
+    fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+    children: ['bc4-italian', 'd4-scotch', 'bb5-ruy'],
+    parent: 'nf3',
+    depth: 4,
+    isMainLine: true,
+    isRequired: true,
+    moveNumber: 2,
+    color: 'b'
+  },
+  {
+    id: 'd6-philidor',
+    move: { from: 'd7', to: 'd6', san: 'd6' },
+    notation: 'd6',
+    fen: 'rnbqkbnr/ppp2ppp/3p4/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3',
+    children: ['d4-philidor'],
+    parent: 'nf3',
+    depth: 4,
+    isMainLine: false,
+    isRequired: false,
+    moveNumber: 2,
+    color: 'b',
+    annotation: 'Philidor Defense - solid but passive'
+  },
+  {
+    id: 'nf6-petrov',
+    move: { from: 'g8', to: 'f6', san: 'Nf6' },
+    notation: 'Nf6',
+    fen: 'rnbqkb1r/pppp1ppp/5n2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+    children: ['nxe5'],
+    parent: 'nf3',
+    depth: 4,
+    isMainLine: false,
+    isRequired: false,
+    moveNumber: 2,
+    color: 'b',
+    annotation: "Petrov's Defense - counterattacking the center"
+  },
+  {
+    id: 'bc4-italian',
+    move: { from: 'f1', to: 'c4', san: 'Bc4' },
+    notation: 'Bc4',
+    fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+    children: ['bc5', 'be7', 'f5'],
+    parent: 'nc6',
+    depth: 5,
+    isMainLine: true,
+    isRequired: true,
+    moveNumber: 3,
+    color: 'w',
+    annotation: 'Italian Game - classical development'
+  },
+  {
+    id: 'd4-scotch',
+    move: { from: 'd2', to: 'd4', san: 'd4' },
+    notation: 'd4',
+    fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq d3 0 3',
+    children: ['exd4-scotch'],
+    parent: 'nc6',
+    depth: 5,
+    isMainLine: false,
+    isRequired: true,
+    moveNumber: 3,
+    color: 'w',
+    annotation: 'Scotch Game - opening the center'
+  },
+  {
+    id: 'bb5-ruy',
+    move: { from: 'f1', to: 'b5', san: 'Bb5' },
+    notation: 'Bb5',
+    fen: 'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+    children: ['a6', 'nf6-berlin', 'f5-schliemann'],
+    parent: 'nc6',
+    depth: 5,
+    isMainLine: false,
+    isRequired: true,
+    moveNumber: 3,
+    color: 'w',
+    annotation: 'Ruy-Lopez - the Spanish Opening'
+  }
+];
 
-interface VariationNode {
-  id: string;
-  move: ChessMove;
-  notation: string;
-  fen: string;
-  children: VariationNode[];
-  parent?: string;
-  depth: number;
-  isMainLine: boolean;
-  isRequired?: boolean;
-  annotation?: string;
-  evaluation?: string;
-  moveNumber: number;
-  color: 'w' | 'b';
-}
+const HorizontalVariationTree = () => {
+  const [isInstructorMode, setIsInstructorMode] = useState(true);
+  const [expandedNodes, setExpandedNodes] = useState(new Set(['start', 'e4', 'e5', 'nf3', 'nc6']));
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [currentPath, setCurrentPath] = useState(['start']); // Track the current path from root
+  const [playedMoves, setPlayedMoves] = useState([]); // Track moves played on the board
+  const [requiredNodes, setRequiredNodes] = useState(new Set(['start', 'e4', 'e5', 'nf3', 'nc6', 'bc4-italian', 'd4-scotch', 'bb5-ruy']));
+  const [hintableNodes, setHintableNodes] = useState(new Set(['bc4-italian', 'bb5-ruy']));
 
-interface HorizontalVariationTreeProps {
-  variations: VariationNode[];
-  currentMoveId?: string;
-  onMoveClick: (nodeId: string, fen: string) => void;
-  onToggleRequired?: (nodeId: string, required: boolean) => void;
-  onToggleHintable?: (nodeId: string) => void;
-  hintableNodes?: Set<string>;
-  isInstructor?: boolean;
-  showOnlyRequired?: boolean;
-  maxDepth?: number;
-  title?: string;
-}
+  // Build tree structure from flat data
+  const treeStructure = useMemo(() => {
+    const nodeMap = {};
+    const roots = [];
 
-const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
-  variations,
-  currentMoveId,
-  onMoveClick,
-  onToggleRequired,
-  onToggleHintable,
-  hintableNodes = new Set(),
-  isInstructor = false,
-  showOnlyRequired = false,
-  maxDepth = 10,
-  title = "Puzzle Variations"
-}) => {
-  const [expandedBranches, setExpandedBranches] = useState<Set<string>>(new Set());
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const treeRef = useRef<HTMLDivElement>(null);
-  const currentNodeRef = useRef<HTMLDivElement>(null);
+    // Create node map
+    sampleVariations.forEach(variation => {
+      nodeMap[variation.id] = {
+        ...variation,
+        children: []
+      };
+    });
 
-  // Auto-scroll to current node
-  useEffect(() => {
-    if (autoScroll && currentMoveId && currentNodeRef.current) {
-      currentNodeRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-        inline: 'center'
-      });
-    }
-  }, [currentMoveId, autoScroll]);
+    // Build parent-child relationships
+    sampleVariations.forEach(variation => {
+      if (variation.parent) {
+        if (nodeMap[variation.parent]) {
+          nodeMap[variation.parent].children.push(nodeMap[variation.id]);
+        }
+      } else {
+        roots.push(nodeMap[variation.id]);
+      }
+    });
 
-  // Build variation tree structure
-  const variationTree = useMemo(() => {
-    if (variations.length === 0) return [];
+    return { nodeMap, roots };
+  }, []);
 
-    const roots = variations.filter(node => !node.parent);
-    return roots.length === 0 && variations.length > 0 ? [variations[0]] : roots;
-  }, [variations]);
-
-  // Filter variations based on requirements
-  const filteredVariations = useMemo(() => {
-    if (!showOnlyRequired) return variationTree;
+  // Get the path from root to any node
+  const getPathToNode = useCallback((nodeId) => {
+    const path = [];
+    let current = treeStructure.nodeMap[nodeId];
     
-    const filterNodes = (nodes: VariationNode[]): VariationNode[] => {
-      return nodes
-        .filter(node => node.isRequired || node.isMainLine)
-        .map(node => ({
-          ...node,
-          children: filterNodes(node.children || [])
-        }));
-    };
+    while (current) {
+      path.unshift(current.id);
+      current = current.parent ? treeStructure.nodeMap[current.parent] : null;
+    }
+    
+    return path;
+  }, [treeStructure]);
 
-    return filterNodes(variationTree);
-  }, [variationTree, showOnlyRequired]);
+  // Get all moves from root to a specific node
+  const getMovesToNode = useCallback((nodeId) => {
+    const path = getPathToNode(nodeId);
+    const moves = [];
+    
+    for (let i = 1; i < path.length; i++) { // Skip 'start' node
+      const node = treeStructure.nodeMap[path[i]];
+      if (node && node.move) {
+        moves.push({
+          id: node.id,
+          notation: node.notation,
+          move: node.move,
+          fen: node.fen
+        });
+      }
+    }
+    
+    return moves;
+  }, [treeStructure, getPathToNode]);
 
-  const toggleBranch = useCallback((nodeId: string) => {
-    setExpandedBranches(prev => {
+  const toggleExpanded = useCallback((nodeId) => {
+    setExpandedNodes(prev => {
       const newSet = new Set(prev);
       if (newSet.has(nodeId)) {
         newSet.delete(nodeId);
@@ -100,291 +288,387 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
     });
   }, []);
 
-  const handleToggleRequired = useCallback((nodeId: string, required: boolean) => {
-    if (onToggleRequired) {
-      onToggleRequired(nodeId, required);
+  const toggleRequired = useCallback((nodeId) => {
+    if (!isInstructorMode) return;
+    
+    setRequiredNodes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  }, [isInstructorMode]);
+
+  const toggleHintable = useCallback((nodeId) => {
+    if (!isInstructorMode) return;
+    
+    setHintableNodes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  }, [isInstructorMode]);
+
+  const handleNodeClick = useCallback((node) => {
+    setSelectedNode(node.id);
+    
+    if (node.id === 'start') {
+      // Reset to starting position
+      setCurrentPath(['start']);
+      setPlayedMoves([]);
+      console.log('Reset to starting position');
+      // Here you would call: onLoadPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
+      return;
     }
-  }, [onToggleRequired]);
 
-  const handleNodeClick = useCallback((nodeId: string, fen: string) => {
-    setSelectedNode(nodeId);
-    onMoveClick(nodeId, fen);
-  }, [onMoveClick]);
+    const targetPath = getPathToNode(node.id);
+    const currentPathLength = currentPath.length;
+    
+    // Find the common ancestor between current path and target path
+    let commonAncestorIndex = 0;
+    for (let i = 0; i < Math.min(currentPath.length, targetPath.length); i++) {
+      if (currentPath[i] === targetPath[i]) {
+        commonAncestorIndex = i;
+      } else {
+        break;
+      }
+    }
 
-  const renderMoveNode = useCallback((node: VariationNode, depth: number = 0) => {
-    const isExpanded = expandedBranches.has(node.id);
-    const isCurrent = currentMoveId === node.id;
-    const isHovered = hoveredNode === node.id;
+    // If clicking on a node that's already in our current path
+    if (currentPath.includes(node.id)) {
+      const nodeIndex = currentPath.indexOf(node.id);
+      const newPath = currentPath.slice(0, nodeIndex + 1);
+      const newPlayedMoves = getMovesToNode(node.id);
+      
+      setCurrentPath(newPath);
+      setPlayedMoves(newPlayedMoves);
+      
+      console.log('Navigated back to:', node.notation);
+      console.log('Position FEN:', node.fen);
+      console.log('Moves played:', newPlayedMoves);
+      // Here you would call: onLoadPosition(node.fen)
+      return;
+    }
+
+    // If clicking on a new branch, we need to navigate step by step
+    const nextNodeInPath = targetPath[currentPathLength];
+    
+    if (nextNodeInPath) {
+      const nextNode = treeStructure.nodeMap[nextNodeInPath];
+      if (nextNode) {
+        const newPath = [...currentPath, nextNode.id];
+        const newPlayedMoves = getMovesToNode(nextNode.id);
+        
+        setCurrentPath(newPath);
+        setPlayedMoves(newPlayedMoves);
+        
+        console.log('Made move:', nextNode.notation);
+        console.log('Position FEN:', nextNode.fen);
+        console.log('Current path:', newPath);
+        console.log('Moves played:', newPlayedMoves);
+        
+        // Here you would call: onLoadPosition(nextNode.fen)
+        // And update the chess board to show this position
+      }
+    }
+  }, [currentPath, getPathToNode, getMovesToNode, treeStructure]);
+
+  const renderNode = useCallback((node, isLast = false) => {
+    const isExpanded = expandedNodes.has(node.id);
     const isSelected = selectedNode === node.id;
-    const hasChildren = node.children && node.children.length > 0;
-    const isMainLine = node.isMainLine;
-    const isRequired = node.isRequired;
+    const isInCurrentPath = currentPath.includes(node.id);
+    const isNextMove = currentPath.length < getPathToNode(node.id).length && 
+                       getPathToNode(node.id)[currentPath.length] === node.id &&
+                       getPathToNode(node.id).slice(0, currentPath.length).every((id, i) => id === currentPath[i]);
+    const isRequired = requiredNodes.has(node.id);
     const isHintable = hintableNodes.has(node.id);
+    const hasChildren = node.children.length > 0;
+    const shouldShowInStudentMode = !isInstructorMode ? (isRequired || node.isMainLine) : true;
 
-    const ref = isCurrent ? currentNodeRef : undefined;
+    if (!shouldShowInStudentMode) return null;
 
     return (
-      <div
-        key={node.id}
-        ref={ref}
-        className={`variation-node-container ${depth === 0 ? 'root-node' : ''}`}
-        style={{ 
-          marginLeft: depth * 24,
-          opacity: depth > maxDepth ? 0.6 : 1
-        }}
-      >
-        <div
-          className={`variation-node ${isMainLine ? 'main-line' : 'side-line'} ${
-            isCurrent ? 'current' : ''
-          } ${isHovered ? 'hovered' : ''} ${isSelected ? 'selected' : ''} ${
-            isRequired ? 'required' : ''
-          } ${isHintable ? 'hintable' : ''} ${hasChildren ? 'has-children' : ''}`}
-          onMouseEnter={() => setHoveredNode(node.id)}
-          onMouseLeave={() => setHoveredNode(null)}
-          onClick={() => handleNodeClick(node.id, node.fen)}
-        >
-          {/* Move Number */}
-          <div className="move-number">
-            {node.color === 'w' ? `${node.moveNumber}.` : `${node.moveNumber}...`}
-          </div>
+      <div key={node.id} className="variation-node-container">
+        <div className="node-line">
+          {/* Connector line */}
+          {node.parent && (
+            <div className="connector">
+              <div className="horizontal-line"></div>
+              {!isLast && <div className="vertical-line"></div>}
+            </div>
+          )}
+          
+          {/* Node content */}
+          <div 
+            className={`variation-node ${node.isMainLine ? 'main-line' : 'side-line'} ${
+              isSelected ? 'selected' : ''
+            } ${isInCurrentPath ? 'in-path' : ''} ${
+              isNextMove ? 'next-move' : ''
+            } ${isRequired ? 'required' : ''} ${isHintable ? 'hintable' : ''}`}
+            onClick={() => handleNodeClick(node)}
+          >
+            {/* Move notation */}
+            <div className="move-content">
+              {node.moveNumber > 0 && (
+                <span className="move-number">
+                  {node.color === 'w' ? `${node.moveNumber}.` : `${node.moveNumber}...`}
+                </span>
+              )}
+              <span className="move-notation">{node.notation}</span>
+            </div>
 
-          {/* Move Content */}
-          <div className="move-content">
-            <div className="move-notation">{node.notation}</div>
-            
-            {/* Evaluation */}
-            {node.evaluation && (
-              <div className={`evaluation ${node.evaluation.startsWith('+') ? 'positive' : 'negative'}`}>
-                {node.evaluation}
-              </div>
-            )}
-          </div>
+            {/* Navigation indicators */}
+            <div className="nav-indicators">
+              {isInCurrentPath && (
+                <div className="nav-badge current-path" title="In current path">
+                  ✓
+                </div>
+              )}
+              {isNextMove && (
+                <div className="nav-badge next-move-indicator" title="Click to continue">
+                  →
+                </div>
+              )}
+            </div>
 
-          {/* Status Indicators */}
-          <div className="status-indicators">
-            {isRequired && (
-              <div className="status-badge required-badge" title="Required move">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-              </div>
-            )}
-            
-            {isHintable && (
-              <div className="status-badge hint-badge" title="Hintable move">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                </svg>
-              </div>
-            )}
-          </div>
+            {/* Status indicators */}
+            <div className="status-indicators">
+              {isRequired && (
+                <div className="status-badge required-badge" title="Required for students">
+                  ★
+                </div>
+              )}
+              {isHintable && (
+                <div className="status-badge hint-badge" title="Hintable move">
+                  💡
+                </div>
+              )}
+            </div>
 
-          {/* Instructor Controls */}
-          {isInstructor && (
-            <div className="instructor-controls">
-              <button
-                className={`control-btn required-toggle ${isRequired ? 'active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleRequired(node.id, !isRequired);
-                }}
-                title={isRequired ? 'Mark as optional' : 'Mark as required'}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-              </button>
-              
-              {onToggleHintable && (
+            {/* Instructor controls */}
+            {isInstructorMode && node.id !== 'start' && (
+              <div className="instructor-controls">
+                <button
+                  className={`control-btn required-toggle ${isRequired ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleRequired(node.id);
+                  }}
+                  title="Mark as required for students"
+                >
+                  ☆
+                </button>
                 <button
                   className={`control-btn hint-toggle ${isHintable ? 'active' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onToggleHintable(node.id);
+                    toggleHintable(node.id);
                   }}
-                  title={isHintable ? 'Remove from hints' : 'Add to hints'}
+                  title="Mark as hintable"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                  </svg>
+                  💡
                 </button>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {/* Branch Expansion Button */}
-          {hasChildren && (
-            <button
-              className={`branch-toggle ${isExpanded ? 'expanded' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleBranch(node.id);
-              }}
-              title={isExpanded ? 'Collapse variations' : 'Show variations'}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7 10l5 5 5-5z"/>
-              </svg>
-            </button>
-          )}
-
-          {/* Progress Indicator */}
-          {isCurrent && (
-            <div className="current-indicator">
-              <div className="pulse-ring"></div>
-            </div>
-          )}
+            {/* Expand/collapse button */}
+            {hasChildren && (
+              <button
+                className={`expand-btn ${isExpanded ? 'expanded' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleExpanded(node.id);
+                }}
+                title={isExpanded ? 'Collapse' : 'Expand'}
+              >
+                {isExpanded ? '−' : '+'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Annotation */}
         {node.annotation && (
-          <div className="move-annotation">
-            <div className="annotation-content">
-              <span className="annotation-icon">💭</span>
-              <span className="annotation-text">{node.annotation}</span>
-            </div>
+          <div className="annotation">
+            <span className="annotation-icon">💭</span>
+            <span className="annotation-text">{node.annotation}</span>
           </div>
         )}
 
-        {/* Children Branches */}
-        {hasChildren && isExpanded && node.children.length > 0 && (
-          <div className="variation-children">
+        {/* Children */}
+        {hasChildren && isExpanded && (
+          <div className="children-container">
             {node.children.map((child, index) => (
-              <div key={child.id} className="child-branch">
-                <div className="branch-connector">
-                  <div className="connector-line"></div>
-                  <div className="connector-dot"></div>
-                </div>
-                {renderMoveNode(child, depth + 1)}
+              <div key={child.id} className="child-wrapper">
+                {renderNode(child, index === node.children.length - 1)}
               </div>
             ))}
           </div>
         )}
       </div>
     );
-  }, [
-    expandedBranches,
-    currentMoveId,
-    hoveredNode,
-    selectedNode,
-    isInstructor,
-    handleNodeClick,
-    toggleBranch,
-    handleToggleRequired,
-    onToggleHintable,
-    hintableNodes,
-    maxDepth
-  ]);
+  }, [expandedNodes, selectedNode, currentPath, requiredNodes, hintableNodes, isInstructorMode, handleNodeClick, toggleExpanded, toggleRequired, toggleHintable, getPathToNode]);
 
-  const variationStats = useMemo(() => {
-    const totalNodes = variations.length;
-    const requiredNodes = variations.filter(n => n.isRequired).length;
-    const mainLineNodes = variations.filter(n => n.isMainLine).length;
-    const maxDepthReached = Math.max(...variations.map(n => n.depth), 0);
-
-    return {
-      total: totalNodes,
-      required: requiredNodes,
-      mainLine: mainLineNodes,
-      maxDepth: maxDepthReached
+  const exportConfiguration = useCallback(() => {
+    const config = {
+      requiredNodes: Array.from(requiredNodes),
+      hintableNodes: Array.from(hintableNodes),
+      timestamp: new Date().toISOString()
     };
-  }, [variations]);
+    console.log('Exported configuration:', config);
+    // Here you would save to backend or download as JSON
+  }, [requiredNodes, hintableNodes]);
 
-  if (filteredVariations.length === 0) {
-    return (
-      <div className="horizontal-tree-container">
-        <div className="tree-header">
-          <h4>{title}</h4>
-        </div>
-        <div className="tree-empty">
-          <div className="empty-state">
-            <div className="empty-icon">🌳</div>
-            <p>No variations available</p>
-            {showOnlyRequired && (
-              <p className="empty-hint">
-                No variations marked as required. 
-                {isInstructor && " Use the star button to mark important variations."}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const stats = useMemo(() => {
+    const total = sampleVariations.length;
+    const required = requiredNodes.size;
+    const hintable = hintableNodes.size;
+    const mainLine = sampleVariations.filter(v => v.isMainLine).length;
+    
+    return { total, required, hintable, mainLine };
+  }, [requiredNodes, hintableNodes]);
 
   return (
-    <div className="horizontal-tree-container" ref={treeRef}>
+    <div className="horizontal-variation-tree">
       {/* Header */}
       <div className="tree-header">
-        <div className="tree-title">
-          <h4>{title}</h4>
-          <div className="tree-stats">
-            <span className="stat">
-              <strong>{variationStats.total}</strong> moves
-            </span>
-            {isInstructor && (
-              <>
-                <span className="stat">
-                  <strong>{variationStats.required}</strong> required
-                </span>
-                <span className="stat">
-                  <strong>{variationStats.mainLine}</strong> main line
-                </span>
-              </>
-            )}
-          </div>
+        <div className="header-content">
+          <h2>🌳 Chess Opening Tree</h2>
+          <p>Interactive variation explorer with instructor controls</p>
         </div>
+        
+        <div className="header-controls">
+          <button
+            className={`mode-toggle ${isInstructorMode ? 'instructor' : 'student'}`}
+            onClick={() => setIsInstructorMode(!isInstructorMode)}
+          >
+            {isInstructorMode ? '👨‍🏫 Instructor' : '👨‍🎓 Student'} Mode
+          </button>
+        </div>
+      </div>
 
-        {/* Controls */}
-        <div className="tree-controls">
-          <div className="control-group">
+      {/* Statistics */}
+      <div className="tree-stats">
+        <div className="stat-item">
+          <span className="stat-value">{stats.total}</span>
+          <span className="stat-label">Total Moves</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-value">{stats.required}</span>
+          <span className="stat-label">Required</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-value">{stats.hintable}</span>
+          <span className="stat-label">Hintable</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-value">{stats.mainLine}</span>
+          <span className="stat-label">Main Line</span>
+        </div>
+      </div>
+
+      {/* Controls */}
+      {isInstructorMode && (
+        <div className="instructor-panel">
+          <div className="panel-header">
+            <h3>👨‍🏫 Instructor Controls</h3>
+          </div>
+          <div className="control-buttons">
             <button
-              className={`control-btn ${autoScroll ? 'active' : ''}`}
-              onClick={() => setAutoScroll(!autoScroll)}
-              title={autoScroll ? 'Disable auto-scroll' : 'Enable auto-scroll'}
+              className="control-btn expand-all"
+              onClick={() => setExpandedNodes(new Set(sampleVariations.map(v => v.id)))}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-              Auto-scroll
+              🔓 Expand All
+            </button>
+            <button
+              className="control-btn collapse-all"
+              onClick={() => setExpandedNodes(new Set(['start']))}
+            >
+              🔒 Collapse All
+            </button>
+            <button
+              className="control-btn export"
+              onClick={exportConfiguration}
+            >
+              💾 Export Config
             </button>
           </div>
+          <div className="instructor-instructions">
+            <p><strong>★</strong> Mark moves as required for student focus</p>
+            <p><strong>💡</strong> Mark moves as hintable during study</p>
+          </div>
+        </div>
+      )}
 
-          {isInstructor && (
-            <div className="control-group">
-              <button
-                className="control-btn"
-                onClick={() => setExpandedBranches(new Set(variations.map(n => n.id)))}
-                title="Expand all branches"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                </svg>
-                Expand All
-              </button>
-              <button
-                className="control-btn"
-                onClick={() => setExpandedBranches(new Set())}
-                title="Collapse all branches"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 13H5v-2h14v2z"/>
-                </svg>
-                Collapse All
-              </button>
+      {/* Navigation Panel */}
+      <div className="navigation-panel">
+        <div className="panel-header">
+          <h3>🎯 Current Position</h3>
+        </div>
+        <div className="navigation-info">
+          <div className="current-path-display">
+            <strong>Path:</strong> 
+            {currentPath.slice(1).map((nodeId, index) => {
+              const node = treeStructure.nodeMap[nodeId];
+              return node ? (
+                <span key={nodeId} className="path-move">
+                  {index > 0 && ' → '}{node.notation}
+                </span>
+              ) : null;
+            })}
+            {currentPath.length === 1 && <span className="path-move">Starting Position</span>}
+          </div>
+          <div className="move-count">
+            <strong>Moves played:</strong> {playedMoves.length}
+          </div>
+          {playedMoves.length > 0 && (
+            <div className="current-fen">
+              <strong>Position:</strong> 
+              <code className="fen-display">{treeStructure.nodeMap[currentPath[currentPath.length - 1]]?.fen || 'N/A'}</code>
             </div>
           )}
+        </div>
+        
+        {/* Navigation hints for students */}
+        {!isInstructorMode && (
+          <div className="navigation-hints">
+            <div className="hint-item">
+              <span className="hint-icon">✓</span>
+              <span>Green checkmark = moves you've played</span>
+            </div>
+            <div className="hint-item">
+              <span className="hint-icon">→</span>
+              <span>Arrow = next possible move to continue</span>
+            </div>
+            <div className="hint-item">
+              <span className="hint-icon">💡</span>
+              <span>Click any move to jump to that position</span>
+            </div>
+          </div>
+        )}
+        
+        {/* Reset button */}
+        <div className="navigation-controls">
+          <button
+            className="reset-btn"
+            onClick={() => handleNodeClick(treeStructure.nodeMap['start'])}
+          >
+            🔄 Reset to Start
+          </button>
         </div>
       </div>
 
       {/* Variation Tree */}
-      <div className="tree-content">
-        <div className="variations-container">
-          {filteredVariations.map((rootNode, index) => (
-            <div key={rootNode.id} className="variation-root">
-              {renderMoveNode(rootNode, 0)}
-            </div>
-          ))}
+      <div className="tree-container">
+        <div className="tree-content">
+          {treeStructure.roots.map(root => renderNode(root))}
         </div>
       </div>
 
@@ -397,49 +681,28 @@ const HorizontalVariationTree: React.FC<HorizontalVariationTreeProps> = ({
           </div>
           <div className="legend-item">
             <div className="legend-icon side-line"></div>
-            <span>Variation</span>
+            <span>Alternative</span>
           </div>
-          {isInstructor && (
-            <>
-              <div className="legend-item">
-                <div className="legend-icon required"></div>
-                <span>Required (★)</span>
-              </div>
-              <div className="legend-item">
-                <div className="legend-icon hintable"></div>
-                <span>Hintable (✓)</span>
-              </div>
-            </>
-          )}
-          {!isInstructor && (
-            <>
-              <div className="legend-item">
-                <div className="legend-icon required"></div>
-                <span>Study This (★)</span>
-              </div>
-              <div className="legend-item">
-                <div className="legend-icon revealed"></div>
-                <span>Your Moves</span>
-              </div>
-            </>
-          )}
+          <div className="legend-item">
+            <div className="legend-icon in-path"></div>
+            <span>Played (✓)</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-icon next-move"></div>
+            <span>Next Move (→)</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-icon required"></div>
+            <span>Required (★)</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-icon hintable"></div>
+            <span>Hintable (💡)</span>
+          </div>
         </div>
-
-        {/* Instructions */}
-        {isInstructor && (
-          <div className="instructor-hint">
-            💡 Click the star (☆/★) to mark variations as required, and the checkmark (🔒/✓) to make moves hintable
-          </div>
-        )}
-
-        {!isInstructor && variationStats.required > 0 && (
-          <div className="student-hint">
-            🎯 The tree reveals as you play! Starred (★) variations are essential to solve the puzzle
-          </div>
-        )}
       </div>
     </div>
   );
 };
 
-export default React.memo(HorizontalVariationTree);
+export default HorizontalVariationTree;

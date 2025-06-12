@@ -365,3 +365,5 @@ body {
 .app-nav a:hover {
   background: #f8f9fa;
 }
+
+@import '../components/chess/HorizontalVariationTree.css';
