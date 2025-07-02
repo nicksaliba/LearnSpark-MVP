@@ -1,4 +1,4 @@
-// components/chess/EnhancedPuzzleManager.tsx
+// components/chess/EnhancedPuzzleManager.tsx - Without CSS
 'use client';
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
@@ -51,6 +51,45 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
   const clearMessages = useCallback(() => {
     updateState({ error: null, success: null });
   }, [updateState]);
+
+  // Load sample puzzle
+  const handleLoadSample = useCallback(() => {
+    updateState({ isLoading: true, error: null });
+    
+    try {
+      const samplePuzzle = EnhancedPGNParser.generateSamplePuzzle();
+      const puzzles = [samplePuzzle];
+      
+      // Load the puzzle position
+      onLoadPosition(samplePuzzle.fen);
+      
+      // Initialize selected variations with main line moves
+      const mainLineVariations = new Set(
+        samplePuzzle.variations
+          .filter(v => v.isMainLine)
+          .map(v => v.id)
+      );
+      setSelectedVariations(mainLineVariations);
+
+      updateState({
+        puzzles,
+        currentPuzzleIndex: 0,
+        isLoading: false,
+        success: 'Sample puzzle loaded successfully!',
+        showImporter: false
+      });
+
+      // Notify parent component
+      if (onLoadPuzzles) {
+        onLoadPuzzles(puzzles);
+      }
+    } catch (error) {
+      updateState({
+        error: 'Failed to load sample puzzle',
+        isLoading: false
+      });
+    }
+  }, [onLoadPosition, onLoadPuzzles, updateState]);
 
   // Handle file upload
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -259,7 +298,7 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
 [Result "*"]
 [FEN "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 4"]
 
-4. Ng5 d6 (4... Qe7 5. Nxf7 Qxe4+ 6. Be2 Kxf7 7. d4) 5. Nxf7 Kxf7 6. Qf3+ Ke6 (6... Ke8 7. Qf5 Rf8 8. Qh5+ g6 9. Qxe5+) 7. Nc3 Ncb4 8. Qf5+ Kd7 9. Be6+ Kc6 10. Qc5# *
+4. Ng5 d6 5. Nxf7 Kxf7 6. Qf3+ Ke6 7. Nc3 *
 
 [Event "Fork Tactic"]
 [Site "LearnSpark"] 
@@ -269,7 +308,7 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
 [Result "*"]
 [FEN "rnbqk2r/ppp2ppp/4pn2/3p4/1bPP4/2N2N2/PP2PPPP/R1BQKB1R w KQkq - 0 5"]
 
-5. Qa4+ Nc6 (5... Qd7 6. Qxb4 Nc6 7. Qb5) 6. Nxd5 exd5 (6... Nxd5 7. cxd5 exd5 8. Qxb4) 7. Qxb4 Nxd4 8. Nxd4 Qxd4 9. Be3 *`;
+5. Qa4+ Nc6 6. Nxd5 exd5 7. Qxb4 *`;
 
   return (
     <div className="enhanced-puzzle-manager">
@@ -360,15 +399,30 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
               
               <button
                 className="sample-btn"
+                onClick={handleLoadSample}
+                disabled={state.isLoading}
+              >
+                🎯 Load Sample Puzzle
+              </button>
+              
+              <button
+                className="sample-btn"
                 onClick={() => updateState({
                   showImporter: true,
                   pgnText: samplePgn,
                   fileName: 'sample-puzzles.pgn'
                 })}
               >
-                🎯 Try Sample Puzzles
+                📝 Try Sample PGN
               </button>
             </div>
+
+            {state.isLoading && (
+              <div className="loading-indicator">
+                <div className="spinner"></div>
+                <span>Loading puzzle...</span>
+              </div>
+            )}
 
             <div className="features-list">
               <h4>Features for Instructors:</h4>
@@ -498,9 +552,12 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
           {currentPuzzle && (
             <HorizontalVariationTree
               variations={currentPuzzle.variations}
+              currentMoveId={null}
               onMoveClick={handleVariationMoveClick}
               onToggleRequired={handleToggleRequired}
               isInstructor={isInstructor}
+              requiredNodes={selectedVariations}
+              revealedNodes={new Set(currentPuzzle.variations.map(v => v.id))}
               showOnlyRequired={false}
               title={`${currentPuzzle.title} - Variation Analysis`}
             />
@@ -556,7 +613,7 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
           </div>
         </div>
       )}
-
+      
       <style jsx>{`
         .enhanced-puzzle-manager {
           background: white;
@@ -759,11 +816,40 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
           cursor: pointer;
           font-weight: 500;
           transition: all 0.2s ease;
+          margin-bottom: 8px;
         }
 
-        .sample-btn:hover {
+        .sample-btn:hover:not(:disabled) {
           background: linear-gradient(135deg, #e9ecef, #dee2e6);
           transform: translateY(-1px);
+        }
+
+        .sample-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .loading-indicator {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 20px;
+          margin: 16px 0;
+        }
+
+        .spinner {
+          width: 20px;
+          height: 20px;
+          border: 2px solid #f3f3f3;
+          border-top: 2px solid #007bff;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
         }
 
         .features-list {
@@ -942,6 +1028,7 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
         }
 
         .stat-value {
+          display: block;
           font-size: 1.5rem;
           font-weight: 700;
           color: #1976d2;
@@ -952,7 +1039,6 @@ const EnhancedPuzzleManager: React.FC<EnhancedPuzzleManagerProps> = ({
           font-size: 0.8rem;
           color: #6c757d;
           text-transform: uppercase;
-          font-weight: 600;
         }
 
         .student-instructions {

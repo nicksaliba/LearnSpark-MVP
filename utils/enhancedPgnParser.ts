@@ -1,4 +1,4 @@
-// utils/enhancedPgnParser.ts
+// utils/enhancedPgnParser.ts - Fixed Version
 import { Chess } from 'chess.js';
 
 export interface VariationNode {
@@ -6,7 +6,7 @@ export interface VariationNode {
   move: any;
   notation: string;
   fen: string;
-  children: VariationNode[];
+  children: string[]; // Keep as string IDs for flat structure
   parent?: string;
   depth: number;
   isMainLine: boolean;
@@ -91,223 +91,78 @@ export class EnhancedPGNParser {
     return 'advanced';
   }
 
-  private static parseVariations(
-    pgnText: string, 
-    chess: Chess,
-    startFen?: string
-  ): VariationNode[] {
-    // Reset chess to starting position
-    if (startFen) {
-      chess.load(startFen);
+  private static parseSimplePgn(pgnText: string, startFen?: string): VariationNode[] {
+    const chess = new Chess();
+    
+    // Set starting position
+    if (startFen && startFen !== 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
+      try {
+        chess.load(startFen);
+      } catch (error) {
+        console.warn('Failed to load starting FEN, using default:', error);
+        chess.reset();
+      }
     } else {
       chess.reset();
     }
 
-    // Parse the PGN and extract moves with variations
-    const cleanPgn = this.cleanPgnForParsing(pgnText);
-    const tokens = this.tokenizePgn(cleanPgn);
-    
-    // Build the tree structure
-    const rootNodes: VariationNode[] = [];
-    const allNodes: VariationNode[] = [];
-    
-    this.parseTokensToTree(tokens, chess, rootNodes, allNodes, 0, true, null);
-    
-    return allNodes;
-  }
-
-  private static cleanPgnForParsing(pgn: string): string {
-    // Remove headers but keep comments and variations
-    return pgn
+    // Clean the PGN text
+    const cleanPgn = pgnText
       .replace(/\[[^\]]*\]/g, '') // Remove headers
-      .replace(/^\s*\n/gm, '') // Remove empty lines
+      .replace(/\{[^}]*\}/g, '') // Remove comments for now
+      .replace(/\([^)]*\)/g, '') // Remove variations for now
+      .replace(/\d+\.\.\./g, '') // Remove black move numbers
+      .replace(/[*]|1-0|0-1|1\/2-1\/2/g, '') // Remove result
       .trim();
-  }
 
-  private static tokenizePgn(pgn: string): string[] {
-    const tokens: string[] = [];
-    let current = '';
-    let inComment = false;
-    let braceLevel = 0;
+    // Split into tokens
+    const tokens = cleanPgn.split(/\s+/).filter(token => 
+      token.length > 0 && 
+      !token.match(/^\d+\.+$/) && // Skip move numbers
+      !['*', '1-0', '0-1', '1/2-1/2'].includes(token)
+    );
 
-    for (let i = 0; i < pgn.length; i++) {
-      const char = pgn[i];
+    const variations: VariationNode[] = [];
+    let moveNumber = Math.floor(chess.history().length / 2) + 1;
 
-      if (char === '{') {
-        if (current.trim()) {
-          tokens.push(current.trim());
-          current = '';
-        }
-        inComment = true;
-        braceLevel++;
-        current += char;
-      } else if (char === '}') {
-        current += char;
-        braceLevel--;
-        if (braceLevel === 0) {
-          inComment = false;
-          tokens.push(current.trim());
-          current = '';
-        }
-      } else if (!inComment && /\s/.test(char)) {
-        if (current.trim()) {
-          tokens.push(current.trim());
-          current = '';
-        }
-      } else {
-        current += char;
-      }
-    }
-
-    if (current.trim()) {
-      tokens.push(current.trim());
-    }
-
-    return tokens.filter(token => token.length > 0);
-  }
-
-  private static parseTokensToTree(
-    tokens: string[],
-    chess: Chess,
-    currentBranch: VariationNode[],
-    allNodes: VariationNode[],
-    depth: number,
-    isMainLine: boolean,
-    parentNode: VariationNode | null
-  ): number {
-    let i = 0;
-    let lastNode: VariationNode | null = parentNode;
-    
-    while (i < tokens.length) {
-      const token = tokens[i];
-
-      if (token === '(') {
-        // Start of variation - need to go back one move
-        if (lastNode && lastNode.parent) {
-          // Find the parent node
-          const parentNodeObj = allNodes.find(n => n.id === lastNode!.parent);
-          if (parentNodeObj) {
-            // Restore position to parent's position
-            chess.load(parentNodeObj.fen);
-          }
-        } else if (lastNode) {
-          // Go back one move from current position
-          chess.undo();
-        }
-        
-        i++; // Skip the '('
-        
-        // Collect variation tokens
-        const variationTokens: string[] = [];
-        let parenLevel = 1;
-        
-        while (i < tokens.length && parenLevel > 0) {
-          if (tokens[i] === '(') parenLevel++;
-          else if (tokens[i] === ')') parenLevel--;
-          
-          if (parenLevel > 0) {
-            variationTokens.push(tokens[i]);
-          }
-          i++;
-        }
-        
-        // Parse the variation recursively
-        const parentForVariation = lastNode?.parent ? 
-          allNodes.find(n => n.id === lastNode!.parent) : null;
-        
-        const variationBranch: VariationNode[] = [];
-        this.parseTokensToTree(
-          variationTokens, 
-          chess, 
-          variationBranch,
-          allNodes,
-          depth + 1, 
-          false, 
-          parentForVariation
-        );
-        
-        // Add variation nodes as children of the parent
-        if (parentForVariation && variationBranch.length > 0) {
-          parentForVariation.children.push(...variationBranch);
-        }
-        
-        // Restore position after variation
-        if (lastNode) {
-          chess.load(lastNode.fen);
-        }
-        
-        continue;
-      }
-
-      if (token === ')') {
-        return i;
-      }
-
-      // Skip move numbers
-      if (/^\d+\.+$/.test(token)) {
-        i++;
-        continue;
-      }
-
-      // Skip result indicators
-      if (['1-0', '0-1', '1/2-1/2', '*'].includes(token)) {
-        i++;
-        continue;
-      }
-
-      // Skip comments for now (will be handled after move)
-      if (token.startsWith('{') && token.endsWith('}')) {
-        // This is handled after a move is made
-        i++;
-        continue;
-      }
-
-      // Try to make the move
+    for (const token of tokens) {
       try {
         const move = chess.move(token);
         if (move) {
           const nodeId = this.generateId();
-          const moveNumber = Math.floor((chess.history().length - 1) / 2) + 1;
-          
-          const node: VariationNode = {
+          const variation: VariationNode = {
             id: nodeId,
             move: move,
             notation: move.san,
             fen: chess.fen(),
             children: [],
-            parent: lastNode?.id,
-            depth: depth,
-            isMainLine: isMainLine && depth === 0,
-            isRequired: isMainLine && depth === 0,
+            parent: variations.length > 0 ? variations[variations.length - 1].id : undefined,
+            depth: 0,
+            isMainLine: true,
+            isRequired: true,
             moveNumber: moveNumber,
             color: move.color
           };
 
-          // Look ahead for annotation
-          if (i + 1 < tokens.length && tokens[i + 1].startsWith('{') && tokens[i + 1].endsWith('}')) {
-            node.annotation = tokens[i + 1].slice(1, -1);
-            i++; // Skip the annotation token
+          // Link to previous move
+          if (variations.length > 0) {
+            variations[variations.length - 1].children.push(nodeId);
           }
 
-          // Add node to the current branch
-          currentBranch.push(node);
-          allNodes.push(node);
+          variations.push(variation);
           
-          // If this node has a parent, add it to parent's children
-          if (lastNode) {
-            lastNode.children.push(node);
+          // Update move number
+          if (move.color === 'b') {
+            moveNumber++;
           }
-          
-          lastNode = node;
         }
       } catch (error) {
         console.warn('Failed to parse move:', token, error);
       }
-
-      i++;
     }
-    
-    return i;
+
+    console.log('Parsed variations:', variations.length);
+    return variations;
   }
 
   static parse(pgnText: string): ParsedPGNWithVariations {
@@ -372,9 +227,8 @@ export class EnhancedPGNParser {
     // Extract starting FEN if available
     const startingFen = headers.FEN || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-    // Parse variations
-    const chess = new Chess();
-    const variations = this.parseVariations(movesSection, chess, startingFen);
+    // Parse variations using simplified parser
+    const variations = this.parseSimplePgn(movesSection, startingFen);
 
     if (variations.length === 0) {
       return null; // Skip games with no valid moves
@@ -527,60 +381,136 @@ export class EnhancedPGNParser {
       pgn += `[Themes "${puzzle.themes.join(', ')}"]\n`;
       pgn += '\n';
 
-      // Moves - this needs to handle the tree structure
-      const writePgnMoves = (nodes: VariationNode[], moveNumber: number, isWhite: boolean): string => {
-        let pgnStr = '';
-        let currentMoveNumber = moveNumber;
-        let currentIsWhite = isWhite;
-        
-        for (const node of nodes) {
-          if (currentIsWhite) {
-            pgnStr += `${currentMoveNumber}. `;
-          }
-          
-          pgnStr += node.notation;
-          
-          if (node.annotation) {
-            pgnStr += ` {${node.annotation}}`;
-          }
-          
-          // Handle variations (children that are not main line)
-          const variations = node.children.filter(child => !child.isMainLine);
-          for (const variation of variations) {
-            pgnStr += ' (';
-            if (!currentIsWhite) {
-              pgnStr += `${currentMoveNumber}... `;
-            }
-            pgnStr += writePgnMoves([variation, ...variation.children], currentMoveNumber, !currentIsWhite);
-            pgnStr += ')';
-          }
-          
-          pgnStr += ' ';
-          
-          if (!currentIsWhite) {
-            currentMoveNumber++;
-          }
-          currentIsWhite = !currentIsWhite;
-          
-          // Continue with main line
-          const mainLineChild = node.children.find(child => child.isMainLine);
-          if (mainLineChild) {
-            pgnStr += writePgnMoves([mainLineChild], currentMoveNumber, currentIsWhite);
-            break; // Main line continues in recursion
-          }
+      // Moves - simplified linear format
+      let moveNumber = 1;
+      let isWhite = puzzle.fen.split(' ')[1] === 'w';
+      
+      puzzle.variations.forEach((variation, index) => {
+        if (isWhite) {
+          pgn += `${moveNumber}. `;
+        } else if (index === 0) {
+          pgn += `${moveNumber}... `;
         }
         
-        return pgnStr;
-      };
-
-      // Get root nodes (nodes without parents)
-      const rootNodes = puzzle.variations.filter(v => !v.parent);
-      pgn += writePgnMoves(rootNodes, 1, true);
+        pgn += variation.notation;
+        
+        if (variation.annotation) {
+          pgn += ` {${variation.annotation}}`;
+        }
+        
+        pgn += ' ';
+        
+        if (!isWhite) {
+          moveNumber++;
+        }
+        isWhite = !isWhite;
+      });
 
       pgn += puzzle.metadata.result || '*';
       pgn += '\n\n';
     });
 
     return pgn;
+  }
+
+  // Generate sample puzzle for testing
+  static generateSamplePuzzle(): ChessPuzzle {
+    const sampleVariations: VariationNode[] = [
+      {
+        id: 'move-1',
+        move: { from: 'f3', to: 'g5', san: 'Ng5', color: 'w' },
+        notation: 'Ng5',
+        fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p1N1/2B1P3/3P4/PPP2PPP/RNBQK2R b KQkq - 2 4',
+        children: ['move-2'],
+        parent: undefined,
+        depth: 0,
+        isMainLine: true,
+        isRequired: true,
+        moveNumber: 5,
+        color: 'w',
+        annotation: 'Attacking f7!'
+      },
+      {
+        id: 'move-2',
+        move: { from: 'd7', to: 'd6', san: 'd6', color: 'b' },
+        notation: 'd6',
+        fen: 'r1bqkb1r/ppp2ppp/2np1n2/4p1N1/2B1P3/3P4/PPP2PPP/RNBQK2R w KQkq - 0 5',
+        children: ['move-3'],
+        parent: 'move-1',
+        depth: 0,
+        isMainLine: true,
+        isRequired: true,
+        moveNumber: 5,
+        color: 'b'
+      },
+      {
+        id: 'move-3',
+        move: { from: 'g5', to: 'f7', san: 'Nxf7', color: 'w' },
+        notation: 'Nxf7',
+        fen: 'r1bqkb1r/ppp2Npp/2np1n2/4p3/2B1P3/3P4/PPP2PPP/RNBQK2R b KQkq - 0 5',
+        children: ['move-4'],
+        parent: 'move-2',
+        depth: 0,
+        isMainLine: true,
+        isRequired: true,
+        moveNumber: 6,
+        color: 'w',
+        annotation: 'Royal fork!'
+      },
+      {
+        id: 'move-4',
+        move: { from: 'e8', to: 'f7', san: 'Kxf7', color: 'b' },
+        notation: 'Kxf7',
+        fen: 'r1bqkb1r/ppp2kpp/2np1n2/4p3/2B1P3/3P4/PPP2PPP/RNBQK2R w KQkq - 0 6',
+        children: ['move-5'],
+        parent: 'move-3',
+        depth: 0,
+        isMainLine: true,
+        isRequired: true,
+        moveNumber: 6,
+        color: 'b'
+      },
+      {
+        id: 'move-5',
+        move: { from: 'd1', to: 'f3', san: 'Qf3+', color: 'w' },
+        notation: 'Qf3+',
+        fen: 'r1bqkb1r/ppp2kpp/2np1n2/4p3/2B1P3/3P1Q2/PPP2PPP/RNB1K2R b KQ - 1 6',
+        children: [],
+        parent: 'move-4',
+        depth: 0,
+        isMainLine: true,
+        isRequired: true,
+        moveNumber: 7,
+        color: 'w',
+        annotation: 'Winning the queen!'
+      }
+    ];
+
+    return {
+      id: 'sample-puzzle',
+      title: 'Italian Game - Tactical Puzzle',
+      description: 'Find the best continuation for White in this Italian Game position',
+      fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 4',
+      solution: ['Ng5', 'd6', 'Nxf7', 'Kxf7', 'Qf3+'],
+      variations: sampleVariations,
+      difficulty: 'intermediate',
+      themes: ['tactics', 'italian-game', 'fork'],
+      requiredVariations: sampleVariations.map(v => v.id),
+      annotations: {
+        'move-1': 'Attacking f7!',
+        'move-3': 'Royal fork!',
+        'move-5': 'Winning the queen!'
+      },
+      metadata: {
+        source: 'LearnSpark',
+        date: '2024-01-15',
+        white: 'Student',
+        black: 'Computer',
+        event: 'Tactical Training',
+        result: '*',
+        eco: 'C50',
+        opening: 'Italian Game'
+      }
+    };
   }
 }

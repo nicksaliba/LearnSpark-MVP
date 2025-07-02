@@ -1,4 +1,4 @@
-// src/components/chess/ChessBoard.tsx
+// components/chess/ChessBoard.tsx - Fixed Version
 'use client';
 
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
@@ -140,6 +140,7 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
     ...optionSquares
   }), [highlightStyles, optionSquares]);
 
+  // Custom pieces using your SVG files
   const customPieces = useMemo(() => {
     const pieces = ['wP', 'wN', 'wB', 'wR', 'wQ', 'wK', 'bP', 'bN', 'bB', 'bR', 'bQ', 'bK'];
     
@@ -150,17 +151,18 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
             width: squareWidth,
             height: squareWidth,
             backgroundImage: `url(/chess-pieces/${piece}.svg)`,
-            backgroundSize: '80%',
+            backgroundSize: '85%',
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center',
             opacity: isDragging ? 0.5 : 1,
-            transition: 'opacity 0.1s ease-in-out'
+            transition: 'opacity 0.2s ease-in-out',
+            cursor: disabled ? 'default' : 'grab'
           }}
         />
       );
       return acc;
     }, {} as { [piece: string]: React.ComponentType<CustomPieceProps> });
-  }, []);
+  }, [disabled]);
 
   const positionInfo = useMemo(() => {
     const parts = localPosition.split(' ');
@@ -207,15 +209,22 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
           onSquareClick={handleSquareClick}
           customSquareStyles={customSquareStyles}
           boardOrientation={orientation}
-          animationDuration={200}
+          animationDuration={300}
           areArrowsAllowed={true}
           arePiecesDraggable={!disabled}
           customBoardStyle={{
-            borderRadius: '4px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.5)'
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+            border: '2px solid #e9ecef'
           }}
-          customDarkSquareStyle={{ backgroundColor: '#779952' }}
-          customLightSquareStyle={{ backgroundColor: '#edeed1' }}
+          customDarkSquareStyle={{ 
+            backgroundColor: '#779952',
+            border: '1px solid #6b8e4b'
+          }}
+          customLightSquareStyle={{ 
+            backgroundColor: '#edeed1',
+            border: '1px solid #d7d9c2'
+          }}
           customPieces={customPieces}
           customDropSquareStyle={{
             boxShadow: 'inset 0 0 1px 6px rgba(255,255,255,0.75)'
@@ -224,6 +233,7 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
           customPremoveLightSquareStyle={{ backgroundColor: '#F7EC74' }}
           customArrows={chessboardArrows}
           customArrowColor="#rgb(255,170,0)"
+          boardWidth={Math.min(600, window.innerWidth - 40)}
         />
       </div>
       

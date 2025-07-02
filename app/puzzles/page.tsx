@@ -1,348 +1,424 @@
-// app/puzzles/page.tsx - Simple Fallback Version
+// app/puzzles/page.tsx - Fixed Layout with 50/50 Split
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { Chess } from 'chess.js';
+import ChessBoard from '../../components/chess/ChessBoard';
+import EnhancedPuzzleManager from '../../components/chess/EnhancedPuzzleManager';
+import HorizontalVariationTree from '../../components/chess/HorizontalVariationTree';
+import { EnhancedPGNParser, ChessPuzzle, VariationNode } from '../../utils/enhancedPgnParser';
 
-// Simple fallback puzzle page in case the enhanced system has issues
-export default function ChessPuzzlesPageFallback() {
-  const [selectedMode, setSelectedMode] = useState<'instructor' | 'student'>('student');
+interface PuzzlePageState {
+  puzzles: ChessPuzzle[];
+  currentPuzzleIndex: number;
+  currentPosition: string;
+  isInstructorMode: boolean;
+  selectedVariations: Set<string>;
+  currentMoveId: string | null;
+  chess: Chess;
+  error: string | null;
+  success: string | null;
+}
+
+const STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+export default function EnhancedChessPuzzlesPage() {
+  const [state, setState] = useState<PuzzlePageState>({
+    puzzles: [],
+    currentPuzzleIndex: 0,
+    currentPosition: STARTING_FEN,
+    isInstructorMode: true,
+    selectedVariations: new Set(),
+    currentMoveId: null,
+    chess: new Chess(),
+    error: null,
+    success: null,
+  });
+
+  const currentPuzzle = useMemo(() => {
+    return state.puzzles[state.currentPuzzleIndex] || null;
+  }, [state.puzzles, state.currentPuzzleIndex]);
+
+  const updateState = useCallback((updates: Partial<PuzzlePageState>) => {
+    setState(prev => ({ ...prev, ...updates }));
+  }, []);
+
+  const clearMessages = useCallback(() => {
+    updateState({ error: null, success: null });
+  }, [updateState]);
+
+  // Load position from FEN
+  const handleLoadPosition = useCallback((fen: string) => {
+    try {
+      console.log('Loading position:', fen);
+      const success = state.chess.load(fen);
+      if (success) {
+        updateState({ 
+          currentPosition: fen,
+          currentMoveId: null 
+        });
+        console.log('Position loaded successfully');
+      } else {
+        console.error('Failed to load FEN:', fen);
+        updateState({ error: 'Invalid chess position' });
+      }
+    } catch (error) {
+      console.error('Error loading position:', error);
+      updateState({ error: 'Failed to load chess position' });
+    }
+  }, [state.chess, updateState]);
+
+  // Load puzzles from PGN manager
+  const handleLoadPuzzles = useCallback((puzzles: ChessPuzzle[]) => {
+    console.log('Loading puzzles:', puzzles.length);
+    
+    if (puzzles.length === 0) {
+      updateState({ error: 'No puzzles loaded' });
+      return;
+    }
+
+    const firstPuzzle = puzzles[0];
+    
+    // Load the first puzzle's position
+    handleLoadPosition(firstPuzzle.fen);
+    
+    // Initialize selected variations with main line moves
+    const mainLineVariations = new Set(
+      firstPuzzle.variations
+        .filter(v => v.isMainLine)
+        .map(v => v.id)
+    );
+
+    updateState({
+      puzzles,
+      currentPuzzleIndex: 0,
+      selectedVariations: mainLineVariations,
+      success: `Successfully loaded ${puzzles.length} puzzle${puzzles.length !== 1 ? 's' : ''}!`,
+      error: null
+    });
+  }, [handleLoadPosition, updateState]);
+
+  // Handle variation tree move clicks
+  const handleVariationMoveClick = useCallback((nodeId: string, fen: string) => {
+    console.log('Variation move clicked:', nodeId, fen);
+    updateState({
+      currentMoveId: nodeId,
+      currentPosition: fen
+    });
+    clearMessages();
+  }, [updateState, clearMessages]);
+
+  // Handle board moves (for interactive solving)
+  const handleBoardMove = useCallback((from: string, to: string): boolean => {
+    if (!currentPuzzle) return false;
+
+    try {
+      // Try the move on current position
+      const tempChess = new Chess(state.currentPosition);
+      const move = tempChess.move({ from, to });
+      
+      if (move) {
+        const newFen = tempChess.fen();
+        
+        // Check if this move exists in the puzzle variations
+        const matchingVariation = currentPuzzle.variations.find(v => 
+          v.move && v.move.from === from && v.move.to === to
+        );
+
+        if (matchingVariation) {
+          updateState({
+            currentPosition: newFen,
+            currentMoveId: matchingVariation.id,
+            success: `Correct move: ${move.san}`
+          });
+          return true;
+        } else {
+          updateState({
+            error: 'This move is not part of the puzzle solution'
+          });
+          return false;
+        }
+      }
+    } catch (error) {
+      console.error('Error making move:', error);
+      updateState({ error: 'Invalid move' });
+    }
+    
+    return false;
+  }, [currentPuzzle, state.currentPosition, updateState]);
+
+  // Handle instructor variation selection
+  const handleToggleRequired = useCallback((nodeId: string, required: boolean) => {
+    if (!state.isInstructorMode || !currentPuzzle) return;
+
+    const newSelectedVariations = new Set(state.selectedVariations);
+    if (required) {
+      newSelectedVariations.add(nodeId);
+    } else {
+      newSelectedVariations.delete(nodeId);
+    }
+
+    updateState({ selectedVariations: newSelectedVariations });
+  }, [state.isInstructorMode, state.selectedVariations, currentPuzzle, updateState]);
+
+  // Navigate between puzzles
+  const handlePuzzleChange = useCallback((newIndex: number) => {
+    if (newIndex < 0 || newIndex >= state.puzzles.length) return;
+    
+    const puzzle = state.puzzles[newIndex];
+    handleLoadPosition(puzzle.fen);
+    
+    // Update selected variations for new puzzle
+    const mainLineVariations = new Set(
+      puzzle.variations
+        .filter(v => v.isMainLine)
+        .map(v => v.id)
+    );
+    
+    updateState({ 
+      currentPuzzleIndex: newIndex,
+      selectedVariations: mainLineVariations,
+      currentMoveId: null
+    });
+    clearMessages();
+  }, [state.puzzles, handleLoadPosition, updateState, clearMessages]);
+
+  // Clear messages after timeout
+  useEffect(() => {
+    if (state.error || state.success) {
+      const timer = setTimeout(clearMessages, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [state.error, state.success, clearMessages]);
 
   return (
-    <div className="chess-puzzles-page">
+    <div className="enhanced-puzzle-page">
       {/* Header */}
-      <div className="page-header">
+      <div className="puzzle-page-header">
         <div className="header-content">
-          <h1>🧩 Chess Puzzles</h1>
-          <p>Interactive chess puzzle training system</p>
-        </div>
-        
-        <div className="mode-selector">
-          <button
-            className={`mode-btn ${selectedMode === 'instructor' ? 'active' : ''}`}
-            onClick={() => setSelectedMode('instructor')}
-          >
-            👨‍🏫 Instructor Mode
-          </button>
-          <button
-            className={`mode-btn ${selectedMode === 'student' ? 'active' : ''}`}
-            onClick={() => setSelectedMode('student')}
-          >
-            👨‍🎓 Student Mode
-          </button>
+          <h1>🧩 Enhanced Chess Puzzles</h1>
+          <p>Interactive chess puzzle training with horizontal variation trees</p>
+          
+          <div className="header-controls">
+            <div className="mode-toggle">
+              <button
+                className={`mode-btn ${state.isInstructorMode ? 'active instructor' : 'student'}`}
+                onClick={() => updateState({ isInstructorMode: !state.isInstructorMode })}
+              >
+                {state.isInstructorMode ? '👨‍🏫 Instructor Mode' : '👨‍🎓 Student Mode'}
+              </button>
+            </div>
+
+            {/* Puzzle Navigation in Header */}
+            {state.puzzles.length > 1 && (
+              <div className="puzzle-navigation-header">
+                <button
+                  className="nav-btn"
+                  onClick={() => handlePuzzleChange(state.currentPuzzleIndex - 1)}
+                  disabled={state.currentPuzzleIndex === 0}
+                >
+                  ← Previous
+                </button>
+                
+                <div className="puzzle-indicator">
+                  <span className="current">{state.currentPuzzleIndex + 1}</span>
+                  <span className="separator">/</span>
+                  <span className="total">{state.puzzles.length}</span>
+                </div>
+                
+                <button
+                  className="nav-btn"
+                  onClick={() => handlePuzzleChange(state.currentPuzzleIndex + 1)}
+                  disabled={state.currentPuzzleIndex === state.puzzles.length - 1}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="main-content">
-        <div className="content-card">
-          <h2>Chess Puzzle Features</h2>
-          
-          {selectedMode === 'instructor' ? (
-            <div className="instructor-features">
-              <h3>Instructor Features:</h3>
-              <ul>
-                <li>🌳 Interactive horizontal variation trees</li>
-                <li>⭐ Mark essential variations for students</li>
-                <li>🎯 Multiple puzzle navigation and management</li>
-                <li>📊 Automatic difficulty and theme detection</li>
-                <li>💾 Save puzzle configurations for student use</li>
-                <li>📤 Export customized puzzle sets</li>
-                <li>📝 Add annotations and hints</li>
-                <li>🔧 Configure puzzle requirements</li>
-              </ul>
+      {/* Messages */}
+      {state.error && (
+        <div className="message error">
+          <span>❌ {state.error}</span>
+          <button onClick={clearMessages}>×</button>
+        </div>
+      )}
+      
+      {state.success && (
+        <div className="message success">
+          <span>✅ {state.success}</span>
+          <button onClick={clearMessages}>×</button>
+        </div>
+      )}
+
+      {/* Puzzle Manager Section - Top when no puzzles loaded */}
+      {state.puzzles.length === 0 && (
+        <div className="puzzle-manager-section">
+          <EnhancedPuzzleManager
+            onLoadPosition={handleLoadPosition}
+            onLoadPuzzles={handleLoadPuzzles}
+            isInstructor={state.isInstructorMode}
+          />
+        </div>
+      )}
+
+      {/* Current Puzzle Info - Below header when puzzle is loaded */}
+      {currentPuzzle && (
+        <div className="puzzle-info-section">
+          <div className="puzzle-info-card">
+            <div className="puzzle-header">
+              <h2>{currentPuzzle.title}</h2>
+              <div className="puzzle-meta">
+                <span className={`difficulty ${currentPuzzle.difficulty}`}>
+                  {currentPuzzle.difficulty}
+                </span>
+                {currentPuzzle.themes.slice(0, 4).map((theme, index) => (
+                  <span key={index} className="theme">{theme}</span>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="student-features">
-              <h3>Student Features:</h3>
-              <ul>
-                <li>🎯 Focus on instructor-selected key variations</li>
-                <li>⭐ Clear marking of essential moves to study</li>
-                <li>📈 Progressive difficulty and themed learning</li>
-                <li>🧩 Interactive puzzle solving with hints</li>
-                <li>📊 Track your progress and performance</li>
-                <li>💡 Get hints when you're stuck</li>
-                <li>🔄 Reset and retry puzzles</li>
-                <li>🏆 Earn achievements for completing puzzles</li>
-              </ul>
+            <p className="puzzle-description">{currentPuzzle.description}</p>
+            
+            {!state.isInstructorMode && currentPuzzle.requiredVariations.length > 0 && (
+              <div className="student-hint">
+                <strong>💡 Study Focus:</strong> Your instructor has marked <strong>{currentPuzzle.requiredVariations.length}</strong> essential variations. 
+                Look for starred (★) moves in the variation tree!
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main Split Layout: 50% Chess Board | 50% Variation Tree */}
+      {currentPuzzle && (
+        <div className="main-split-layout">
+          {/* Left Side - Chess Board (50%) */}
+          <div className="board-section">
+            <div className="board-container">
+              <ChessBoard
+                position={state.currentPosition}
+                onMove={handleBoardMove}
+                moveHistory={[]}
+                currentMoveIndex={0}
+                disabled={false}
+              />
+            </div>
+            
+            {/* Board Info */}
+            <div className="board-info">
+              <div className="position-info">
+                <div className="info-row">
+                  <strong>Turn:</strong> 
+                  <span className={`turn-indicator ${state.currentPosition.split(' ')[1] === 'w' ? 'white' : 'black'}`}>
+                    {state.currentPosition.split(' ')[1] === 'w' ? 'White' : 'Black'}
+                  </span>
+                </div>
+                <div className="info-row">
+                  <strong>Mode:</strong> 
+                  <span className={`mode-indicator ${state.isInstructorMode ? 'instructor' : 'student'}`}>
+                    {state.isInstructorMode ? 'Instructor' : 'Student'}
+                  </span>
+                </div>
+                {state.currentMoveId && (
+                  <div className="info-row">
+                    <strong>Selected Move:</strong> 
+                    <span className="selected-move">{state.currentMoveId}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side - Variation Tree (50%) */}
+          <div className="variation-section">
+            <HorizontalVariationTree
+              variations={currentPuzzle.variations}
+              currentMoveId={state.currentMoveId}
+              onMoveClick={handleVariationMoveClick}
+              onToggleRequired={handleToggleRequired}
+              isInstructor={state.isInstructorMode}
+              requiredNodes={state.selectedVariations}
+              revealedNodes={new Set(currentPuzzle.variations.map(v => v.id))}
+              showOnlyRequired={false}
+              title="Variation Analysis"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Section - Additional Controls and Stats */}
+      {currentPuzzle && (
+        <div className="bottom-section">
+          {/* Instructor Stats */}
+          {state.isInstructorMode && (
+            <div className="instructor-stats">
+              <h3>📊 Puzzle Statistics</h3>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-value">{currentPuzzle.variations.length}</span>
+                  <span className="stat-label">Total Variations</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-value">{state.selectedVariations.size}</span>
+                  <span className="stat-label">Required Moves</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-value">{currentPuzzle.variations.filter(v => v.isMainLine).length}</span>
+                  <span className="stat-label">Main Line</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-value">{Math.max(...currentPuzzle.variations.map(v => v.depth), 0)}</span>
+                  <span className="stat-label">Max Depth</span>
+                </div>
+              </div>
             </div>
           )}
 
-          <div className="import-section">
-            <h3>📁 Import Chess Puzzles</h3>
-            <p>Load PGN files containing tactical puzzles with variations</p>
-            
-            <div className="import-options">
-              <button className="import-btn">
-                📁 Upload PGN File
-              </button>
-              <button className="import-btn">
-                🎯 Try Sample Puzzles
-              </button>
+          {/* Student Progress */}
+          {!state.isInstructorMode && (
+            <div className="student-progress">
+              <h3>📚 Your Progress</h3>
+              <div className="progress-stats">
+                <div className="stat-item">
+                  <span className="stat-label">Current Puzzle:</span>
+                  <span className="stat-value">{state.currentPuzzleIndex + 1} / {state.puzzles.length}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Required Moves:</span>
+                  <span className="stat-value">{state.selectedVariations.size}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Difficulty:</span>
+                  <span className="stat-value">{currentPuzzle.difficulty}</span>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="coming-soon">
-            <h3>🚀 Coming Soon</h3>
-            <p>The enhanced chess puzzle system is being prepared. Features include:</p>
-            <ul>
-              <li>Real-time puzzle solving</li>
-              <li>Advanced variation tree visualization</li>
-              <li>Progress tracking and analytics</li>
-              <li>Collaborative puzzle creation</li>
-            </ul>
+          {/* Quick Actions */}
+          <div className="quick-actions">
+            <button
+              className="action-btn"
+              onClick={() => handleLoadPosition(currentPuzzle.fen)}
+            >
+              🔄 Reset Position
+            </button>
+            
+            {state.puzzles.length > 0 && (
+              <div className="puzzle-manager-compact">
+                <EnhancedPuzzleManager
+                  onLoadPosition={handleLoadPosition}
+                  onLoadPuzzles={handleLoadPuzzles}
+                  isInstructor={state.isInstructorMode}
+                />
+              </div>
+            )}
           </div>
         </div>
-      </div>
-
-      <style jsx>{`
-        .chess-puzzles-page {
-          min-height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          padding: 20px;
-        }
-
-        .page-header {
-          max-width: 1200px;
-          margin: 0 auto 24px auto;
-          background: rgba(255, 255, 255, 0.95);
-          padding: 24px;
-          border-radius: 16px;
-          backdrop-filter: blur(10px);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 16px;
-        }
-
-        .header-content h1 {
-          margin: 0 0 8px 0;
-          color: #2c3e50;
-          font-size: 2.5rem;
-          font-weight: 700;
-          background: linear-gradient(135deg, #2c3e50, #3498db);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-
-        .header-content p {
-          margin: 0;
-          color: #6c757d;
-          font-size: 1.1rem;
-        }
-
-        .mode-selector {
-          display: flex;
-          gap: 8px;
-        }
-
-        .mode-btn {
-          padding: 12px 20px;
-          border: 2px solid #dee2e6;
-          background: white;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 600;
-          transition: all 0.3s ease;
-        }
-
-        .mode-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-
-        .mode-btn.active {
-          background: linear-gradient(135deg, #667eea, #764ba2);
-          color: white;
-          border-color: #667eea;
-        }
-
-        .main-content {
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        .content-card {
-          background: rgba(255, 255, 255, 0.98);
-          border-radius: 16px;
-          padding: 32px;
-          backdrop-filter: blur(20px);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .content-card h2 {
-          margin: 0 0 24px 0;
-          color: #2c3e50;
-          font-size: 1.8rem;
-          font-weight: 700;
-          text-align: center;
-        }
-
-        .instructor-features,
-        .student-features {
-          margin-bottom: 32px;
-        }
-
-        .instructor-features h3,
-        .student-features h3 {
-          margin: 0 0 16px 0;
-          color: #495057;
-          font-size: 1.4rem;
-          font-weight: 600;
-        }
-
-        .instructor-features ul,
-        .student-features ul {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .instructor-features li,
-        .student-features li {
-          padding: 8px 0;
-          color: #6c757d;
-          font-size: 1rem;
-          line-height: 1.5;
-        }
-
-        .import-section {
-          background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-          padding: 24px;
-          border-radius: 12px;
-          margin-bottom: 24px;
-          text-align: center;
-        }
-
-        .import-section h3 {
-          margin: 0 0 12px 0;
-          color: #2c3e50;
-          font-size: 1.3rem;
-        }
-
-        .import-section p {
-          margin: 0 0 20px 0;
-          color: #6c757d;
-        }
-
-        .import-options {
-          display: flex;
-          gap: 12px;
-          justify-content: center;
-          flex-wrap: wrap;
-        }
-
-        .import-btn {
-          padding: 12px 24px;
-          background: linear-gradient(135deg, #007bff, #0056b3);
-          color: white;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 600;
-          transition: all 0.3s ease;
-          font-size: 1rem;
-        }
-
-        .import-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
-        }
-
-        .coming-soon {
-          background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-          padding: 24px;
-          border-radius: 12px;
-          border: 2px solid #2196f3;
-        }
-
-        .coming-soon h3 {
-          margin: 0 0 12px 0;
-          color: #1565c0;
-          font-size: 1.3rem;
-        }
-
-        .coming-soon p {
-          margin: 0 0 16px 0;
-          color: #1976d2;
-        }
-
-        .coming-soon ul {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .coming-soon li {
-          padding: 4px 0;
-          color: #1976d2;
-          position: relative;
-          padding-left: 20px;
-        }
-
-        .coming-soon li::before {
-          content: '⭐';
-          position: absolute;
-          left: 0;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-          .chess-puzzles-page {
-            padding: 10px;
-          }
-
-          .page-header {
-            flex-direction: column;
-            align-items: flex-start;
-            padding: 16px;
-          }
-
-          .header-content h1 {
-            font-size: 2rem;
-          }
-
-          .mode-selector {
-            width: 100%;
-            justify-content: center;
-          }
-
-          .mode-btn {
-            flex: 1;
-            text-align: center;
-          }
-
-          .content-card {
-            padding: 20px;
-          }
-
-          .import-options {
-            flex-direction: column;
-          }
-
-          .import-btn {
-            width: 100%;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .header-content h1 {
-            font-size: 1.6rem;
-          }
-
-          .content-card h2 {
-            font-size: 1.5rem;
-          }
-
-          .instructor-features h3,
-          .student-features h3 {
-            font-size: 1.2rem;
-          }
-        }
-      `}</style>
+      )}
     </div>
   );
 }
