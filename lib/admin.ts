@@ -1,40 +1,63 @@
-// lib/admin.ts - Admin Authentication Utils
+// lib/admin.ts - Enhanced Admin Authentication Utils
 import { auth } from '@/lib/auth'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, UserRole } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-export async function isAdmin() {
+export async function getUserWithRole() {
   try {
     const session = await auth()
-    if (!session?.user?.id) return false
+    if (!session?.user?.id) return null
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { email: true }
+      select: { 
+        id: true,
+        email: true,
+        role: true,
+        schoolId: true,
+        school: {
+          select: {
+            id: true,
+            name: true,
+            districtId: true
+          }
+        }
+      }
     })
 
-    // For now, make admin check based on email
-    // In production, you'd want a proper role system
-    const adminEmails = [
-      'nick.saliba@gmail.com',
-      // Add your email here
-      process.env.ADMIN_EMAIL
-    ].filter(Boolean)
-
-    return user ? adminEmails.includes(user.email) : false
+    return user
   } catch (error) {
-    console.error('Admin check error:', error)
-    return false
+    console.error('Get user error:', error)
+    return null
   } finally {
     await prisma.$disconnect()
   }
 }
 
-export async function requireAdmin() {
-  const isAdminUser = await isAdmin()
-  if (!isAdminUser) {
-    throw new Error('Admin access required')
+export async function isAdmin() {
+  const user = await getUserWithRole()
+  return user ? [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(user.role) : false
+}
+
+export async function isTeacher() {
+  const user = await getUserWithRole()
+  return user ? [UserRole.TEACHER, UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(user.role) : false
+}
+
+export async function isSuperAdmin() {
+  const user = await getUserWithRole()
+  return user?.role === UserRole.SUPER_ADMIN
+}
+
+export async function getSchoolContext() {
+  const user = await getUserWithRole()
+  if (!user?.schoolId) return null
+  
+  return {
+    schoolId: user.schoolId,
+    school: user.school,
+    canManageSchool: [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(user.role),
+    canManageDistrict: user.role === UserRole.SUPER_ADMIN && user.school?.districtId
   }
-  return true
 }

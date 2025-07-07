@@ -1,4 +1,4 @@
-// src/components/chess/ChessEditor.tsx - Enhanced with 3 modes
+// src/components/chess/ChessEditor.tsx - Improved Version with Variation Tree
 'use client';
 
 import React, { 
@@ -7,30 +7,35 @@ import React, {
   useCallback, 
   useTransition, 
   useDeferredValue,
-  Suspense
+  Suspense,
+  useMemo
 } from 'react';
 import dynamic from 'next/dynamic';
 import ChessBoard from './ChessBoard';
 import MoveList from './MoveList';
-import StudyManager from './StudyManager';
+import HorizontalVariationTree from './HorizontalVariationTree';
+import EnhancedPuzzleManager from './EnhancedPuzzleManager';
 import { useChess } from '../../hooks/useChess';
 import { 
   ChessStudy, 
   ChessEditorState, 
   Annotation, 
   CreateStudyData,
-  ChessError 
+  ChessError,
+  ChessPuzzle,
+  VariationNode
 } from '../../types/chess';
 import { 
   createNewStudy, 
-  cloneStudy, 
   validateStudy,
-  generateId 
+  generateId,
+  formatDate,
+  formatRelativeTime
 } from '../../utils/chessUtils';
 import './chess.css';
 
 // Chess Editor Modes
-export type ChessEditorMode = 'normal' | 'notation-only' | 'notation-with-arrows';
+export type ChessEditorMode = 'normal' | 'notation-only' | 'notation-with-arrows' | 'puzzle-mode';
 
 interface ChessEditorModeState {
   mode: ChessEditorMode;
@@ -41,7 +46,7 @@ interface ChessEditorModeState {
 // Mode colors for arrows
 const ARROW_COLORS = ['#007bff', '#28a745', '#ffc107', '#6f42c1', '#dc3545', '#17a2b8', '#fd7e14', '#e83e8c'];
 
-// Default studies data - inline to avoid missing import
+// Default studies data
 const defaultStudies: ChessStudy[] = [
   {
     id: 'basic-study',
@@ -64,355 +69,6 @@ const defaultStudies: ChessStudy[] = [
   }
 ];
 
-// Move Input Component
-const MoveInput: React.FC<{ 
-  onMove: (from: string, to: string) => boolean;
-  mode: ChessEditorMode;
-  moveSequence: Array<{ from: string; to: string; notation: string; moveNumber: number }>;
-}> = ({ onMove, mode, moveSequence }) => {
-  const [moveText, setMoveText] = useState('');
-
-  const handleSubmitMove = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!moveText.trim()) return;
-
-    // Parse algebraic notation (simplified)
-    const move = moveText.trim();
-    
-    // For now, assume format like "e2e4" or "e2-e4"
-    const cleanMove = move.replace('-', '').replace('x', '');
-    
-    if (cleanMove.length >= 4) {
-      const from = cleanMove.substring(0, 2);
-      const to = cleanMove.substring(2, 4);
-      
-      console.log('Attempting move from input:', from, 'to', to);
-      const success = onMove(from, to);
-      
-      if (success) {
-        setMoveText('');
-      } else {
-        console.warn('Invalid move:', move);
-      }
-    } else {
-      console.warn('Invalid move format:', move);
-    }
-  }, [moveText, onMove]);
-
-  return (
-    <div className="move-input">
-      <form onSubmit={handleSubmitMove} className="move-form">
-        <div className="input-group">
-          <input
-            type="text"
-            value={moveText}
-            onChange={(e) => setMoveText(e.target.value)}
-            placeholder="e2e4, Nf3, etc."
-            className="move-text-input"
-          />
-          <button type="submit" className="move-submit-btn">
-            Make Move
-          </button>
-        </div>
-      </form>
-      
-      <div className="move-help">
-        <small>
-          Mode: {mode === 'normal' ? 'Normal Play' : mode === 'notation-only' ? 'Notation Only' : 'Notation with Arrows'}
-        </small>
-      </div>
-    </div>
-  );
-};
-
-// Solution Display Component
-const SolutionDisplay: React.FC<{
-  moveSequence: Array<{ from: string; to: string; notation: string; moveNumber: number }>;
-  mode: ChessEditorMode;
-  onRemoveMove: (moveIndex: number) => void;
-  onRemoveLastMove: () => void;
-}> = ({ moveSequence, mode, onRemoveMove, onRemoveLastMove }) => {
-  if (mode === 'normal') return null;
-
-  // Group moves into pairs (White, Black)
-  const movePairs = [];
-  for (let i = 0; i < moveSequence.length; i += 2) {
-    const whiteMove = moveSequence[i];
-    const blackMove = moveSequence[i + 1];
-    movePairs.push({
-      moveNumber: Math.floor(i / 2) + 1,
-      white: whiteMove,
-      black: blackMove,
-      whiteIndex: i,
-      blackIndex: i + 1
-    });
-  }
-
-  return (
-    <div className="solution-display">
-      <div className="solution-header">
-        <h4>📝 Solution</h4>
-        <div className="solution-controls">
-          {moveSequence.length > 0 && (
-            <button 
-              className="remove-last-move-btn"
-              onClick={onRemoveLastMove}
-              title="Remove last move"
-            >
-              ↶ Undo Last
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="solution-content">
-        {moveSequence.length === 0 ? (
-          <p className="no-moves">No moves recorded yet. Start making moves!</p>
-        ) : (
-          <>
-            <div className="solution-table-container">
-              <table className="solution-table">
-                <thead>
-                  <tr>
-                    <th className="move-number-header">#</th>
-                    <th className="white-move-header">White</th>
-                    <th className="black-move-header">Black</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {movePairs.map((pair, pairIndex) => (
-                    <tr key={pairIndex} className="move-pair-row">
-                      <td className="move-number-cell">
-                        <span className="move-number">{pair.moveNumber}.</span>
-                      </td>
-                      <td className="white-move-cell">
-                        {pair.white && (
-                          <div className="move-entry white-move">
-                            <div className="move-content">
-                              <span className="move-notation">{pair.white.notation}</span>
-                              {mode === 'notation-with-arrows' && (
-                                <span 
-                                  className="move-arrow-indicator"
-                                  style={{ 
-                                    backgroundColor: ARROW_COLORS[pairIndex % ARROW_COLORS.length],
-                                    color: 'white'
-                                  }}
-                                >
-                                  ●
-                                </span>
-                              )}
-                            </div>
-                            <button
-                              className="remove-move-btn white-remove"
-                              onClick={() => onRemoveMove(pair.whiteIndex)}
-                              title="Remove White's move and all subsequent moves"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                      <td className="black-move-cell">
-                        {pair.black && (
-                          <div className="move-entry black-move">
-                            <div className="move-content">
-                              <span className="move-notation">{pair.black.notation}</span>
-                              {mode === 'notation-with-arrows' && (
-                                <span 
-                                  className="move-arrow-indicator"
-                                  style={{ 
-                                    backgroundColor: ARROW_COLORS[pairIndex % ARROW_COLORS.length],
-                                    color: 'white'
-                                  }}
-                                >
-                                  ●
-                                </span>
-                              )}
-                            </div>
-                            <button
-                              className="remove-move-btn black-remove"
-                              onClick={() => onRemoveMove(pair.blackIndex)}
-                              title="Remove Black's move and all subsequent moves"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            
-            <div className="solution-summary">
-              <div className="move-count">
-                <strong>Total Moves:</strong> {moveSequence.length}
-                <span className="move-breakdown">
-                  ({Math.ceil(moveSequence.length / 2)} full moves)
-                </span>
-              </div>
-              <div className="current-turn">
-                <strong>Next Turn:</strong> 
-                <span className={`turn-indicator-small ${moveSequence.length % 2 === 0 ? 'white' : 'black'}`}>
-                  {moveSequence.length % 2 === 0 ? 'White' : 'Black'}
-                </span>
-              </div>
-            </div>
-          </>
-        )}
-        
-        <div className="solution-actions">
-          <button 
-            className="solution-copy-btn"
-            onClick={() => {
-              const notation = moveSequence.map(m => m.notation).join(' ');
-              navigator.clipboard.writeText(notation);
-            }}
-          >
-            📋 Copy Notation
-          </button>
-          <button 
-            className="solution-export-btn"
-            onClick={() => {
-              // Generate proper PGN format
-              let pgn = '';
-              for (let i = 0; i < moveSequence.length; i += 2) {
-                const moveNum = Math.floor(i / 2) + 1;
-                const whiteMove = moveSequence[i];
-                const blackMove = moveSequence[i + 1];
-                
-                pgn += `${moveNum}. ${whiteMove.notation}`;
-                if (blackMove) {
-                  pgn += ` ${blackMove.notation}`;
-                }
-                pgn += ' ';
-              }
-              
-              const fullPgn = `[Event "Chess Editor Study"]
-[Site "LearnSpark"]
-[Date "${new Date().toISOString().split('T')[0]}"]
-[Round "1"]
-[White "Player"]
-[Black "Player"]
-[Result "*"]
-
-${pgn.trim()} *`;
-              
-              console.log('Exported PGN:', fullPgn);
-              navigator.clipboard.writeText(fullPgn);
-            }}
-          >
-            📤 Export PGN
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Turn Indicator Component
-const TurnIndicator: React.FC<{
-  currentTurn: 'w' | 'b';
-  mode: ChessEditorMode;
-  moveCount: number;
-}> = ({ currentTurn, mode, moveCount }) => {
-  return (
-    <div className="turn-indicator-container">
-      <div className="turn-indicator-wrapper">
-        <div className="turn-info">
-          <span className="turn-label">Turn:</span>
-          <span className="move-count">Move {Math.floor(moveCount / 2) + 1}</span>
-        </div>
-        <div className={`turn-circle ${currentTurn === 'w' ? 'white-turn' : 'black-turn'}`}>
-          <div className="turn-inner-circle"></div>
-        </div>
-        <div className="turn-text">
-          {currentTurn === 'w' ? 'White' : 'Black'} to move
-        </div>
-      </div>
-      {mode !== 'normal' && (
-        <div className="turn-mode-indicator">
-          <small>
-            {mode === 'notation-only' ? '📝 Recording notation' : '🏹 Recording with arrows'}
-          </small>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Mode Selector Component
-const ModeSelector: React.FC<{
-  currentMode: ChessEditorMode;
-  onModeChange: (mode: ChessEditorMode) => void;
-  onClearSequence: () => void;
-}> = ({ currentMode, onModeChange, onClearSequence }) => {
-  return (
-    <div className="mode-selector">
-      <h4>🎮 Editor Mode</h4>
-      <div className="mode-buttons">
-        <button
-          className={`mode-btn ${currentMode === 'normal' ? 'active' : ''}`}
-          onClick={() => onModeChange('normal')}
-          title="Normal chess play with piece movement"
-        >
-          <span className="mode-icon">♟️</span>
-          <span className="mode-name">Normal</span>
-          <small>Pieces move normally</small>
-        </button>
-        
-        <button
-          className={`mode-btn ${currentMode === 'notation-only' ? 'active' : ''}`}
-          onClick={() => onModeChange('notation-only')}
-          title="Record moves without moving pieces"
-        >
-          <span className="mode-icon">📝</span>
-          <span className="mode-name">Notation Only</span>
-          <small>Generate notation, pieces stay put</small>
-        </button>
-        
-        <button
-          className={`mode-btn ${currentMode === 'notation-with-arrows' ? 'active' : ''}`}
-          onClick={() => onModeChange('notation-with-arrows')}
-          title="Record moves with colored arrows"
-        >
-          <span className="mode-icon">🏹</span>
-          <span className="mode-name">Arrows & Notation</span>
-          <small>Show arrows + generate notation</small>
-        </button>
-      </div>
-      
-      <div className="mode-actions">
-        <button 
-          className="clear-sequence-btn"
-          onClick={onClearSequence}
-          title="Clear all recorded moves"
-        >
-          🗑️ Clear Sequence
-        </button>
-      </div>
-      
-      {currentMode === 'notation-with-arrows' && (
-        <div className="arrow-legend">
-          <h5>Arrow Colors</h5>
-          <div className="color-legend">
-            {ARROW_COLORS.slice(0, 4).map((color, index) => (
-              <div key={index} className="color-item">
-                <span 
-                  className="color-dot"
-                  style={{ backgroundColor: color }}
-                ></span>
-                <span>Move {index + 1}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 const ChessEditor: React.FC = () => {
   const [state, setState] = useState<ChessEditorState>({
     currentStudy: null,
@@ -431,15 +87,33 @@ const ChessEditor: React.FC = () => {
     arrows: []
   });
 
+  // Puzzle state
+  const [puzzles, setPuzzles] = useState<ChessPuzzle[]>([]);
+  const [currentPuzzleIndex, setCurrentPuzzleIndex] = useState(0);
+  const [isInstructorMode, setIsInstructorMode] = useState(true);
+  const [currentMoveId, setCurrentMoveId] = useState<string | null>(null);
+  const [requiredNodes, setRequiredNodes] = useState<Set<string>>(new Set());
+  const [revealedNodes, setRevealedNodes] = useState<Set<string>>(new Set());
+
+  // Study manager state
+  const [showStudyManager, setShowStudyManager] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createFormData, setCreateFormData] = useState<CreateStudyData>({
+    name: '',
+    description: '',
+    startingFen: '',
+    isPublic: false,
+    tags: []
+  });
+  const [formErrors, setFormErrors] = useState<Partial<CreateStudyData>>({});
+
+  // PGN Import state
+  const [showPgnImport, setShowPgnImport] = useState(false);
+  const [pgnText, setPgnText] = useState('');
+
   // React transitions for non-urgent updates
   const [isPending, startTransition] = useTransition();
   const deferredStudies = useDeferredValue(state.studies);
-
-  // Enhanced error handling
-  const [asyncError, setAsyncError] = useState<Error | null>(null);
-
-  // Optimistic updates for better UX
-  const [optimisticStudies, setOptimisticStudies] = useState(state.studies);
 
   const {
     chess,
@@ -463,30 +137,27 @@ const ChessEditor: React.FC = () => {
 
   const updateState = useCallback((updates: Partial<ChessEditorState>) => {
     setState(prevState => ({ ...prevState, ...updates }));
-    
-    // Update optimistic state immediately
-    if (updates.studies) {
-      setOptimisticStudies(updates.studies);
-    }
   }, []);
 
   const handleError = useCallback((error: string | ChessError) => {
     const errorMessage = typeof error === 'string' ? error : error.message;
     updateState({ error: errorMessage, isLoading: false });
-    
-    if (typeof error === 'object') {
-      setAsyncError(error);
-    }
-    
     console.error('Chess Editor Error:', error);
   }, [updateState]);
 
+  const clearMessages = useCallback(() => {
+    updateState({ error: null });
+  }, [updateState]);
+
+  // Get current puzzle
+  const currentPuzzle = useMemo(() => {
+    return puzzles[currentPuzzleIndex] || null;
+  }, [puzzles, currentPuzzleIndex]);
+
+  // Study management functions
   const handleLoadStudy = useCallback((study: ChessStudy) => {
     try {
-      console.log('Loading study:', study);
-      
       if (!validateStudy(study)) {
-        console.error('Study validation failed:', study);
         throw new Error('Invalid study format');
       }
 
@@ -498,37 +169,92 @@ const ChessEditor: React.FC = () => {
 
       const chapter = study.chapters[0];
       if (chapter) {
-        console.log('Loading chapter:', chapter);
-        console.log('Chapter FEN:', chapter.startingFen);
-        
         const success = loadPosition(chapter.startingFen);
         if (!success) {
-          console.warn('Failed to load chapter FEN, using default position');
           const fallbackSuccess = loadPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
           if (!fallbackSuccess) {
-            throw new Error('Failed to load chapter position and fallback failed');
+            throw new Error('Failed to load chapter position');
           }
         }
         updateState({ annotations: chapter.annotations || {} });
       }
+      
+      setShowStudyManager(false);
     } catch (error) {
-      console.error('Error in handleLoadStudy:', error);
       handleError(error as ChessError);
     }
   }, [loadPosition, updateState, handleError]);
 
-  // Load the first study by default (only on client)
-  useEffect(() => {
-    if (isClient && state.studies.length > 0 && !state.currentStudy) {
+  const handleCreateStudy = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    clearMessages();
+    
+    // Validate form
+    const errors: Partial<CreateStudyData> = {};
+    if (!createFormData.name.trim()) {
+      errors.name = 'Study name is required';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+
+    updateState({ isLoading: true });
+
+    try {
+      const newStudy = createNewStudy(
+        createFormData.name.trim(),
+        createFormData.description?.trim(),
+        createFormData.startingFen?.trim()
+      );
+
+      const updatedStudies = [...state.studies, newStudy];
+      updateState({ 
+        studies: updatedStudies,
+        isLoading: false
+      });
+      
+      handleLoadStudy(newStudy);
+      
+      // Reset form
+      setCreateFormData({
+        name: '',
+        description: '',
+        startingFen: '',
+        isPublic: false,
+        tags: []
+      });
+      setShowCreateForm(false);
+    } catch (error) {
+      handleError(error as ChessError);
+    }
+  }, [createFormData, state.studies, updateState, handleError, handleLoadStudy, clearMessages]);
+
+  const handleDeleteStudy = useCallback((studyId: string) => {
+    const confirmed = window.confirm('Are you sure you want to delete this study?');
+    
+    if (confirmed) {
       try {
-        console.log('Auto-loading first study:', state.studies[0]);
-        handleLoadStudy(state.studies[0]);
+        const updatedStudies = state.studies.filter(study => study.id !== studyId);
+        updateState({ studies: updatedStudies });
+
+        if (state.currentStudy && state.currentStudy.id === studyId) {
+          if (updatedStudies.length > 0) {
+            handleLoadStudy(updatedStudies[0]);
+          } else {
+            updateState({ 
+              currentStudy: null,
+              currentChapter: 0,
+              annotations: {}
+            });
+          }
+        }
       } catch (error) {
-        console.error('Failed to auto-load first study:', error);
-        updateState({ error: 'Failed to load default study' });
+        handleError('Failed to delete study');
       }
     }
-  }, [state.studies, state.currentStudy, isClient, handleLoadStudy, updateState]);
+  }, [state.studies, state.currentStudy, updateState, handleError, handleLoadStudy]);
 
   const handleLoadChapter = useCallback((chapterIndex: number) => {
     if (!state.currentStudy || !state.currentStudy.chapters[chapterIndex]) {
@@ -540,14 +266,11 @@ const ChessEditor: React.FC = () => {
       updateState({ currentChapter: chapterIndex, error: null });
       
       const chapter = state.currentStudy.chapters[chapterIndex];
-      console.log('Loading chapter:', chapterIndex, chapter);
-      
       const success = loadPosition(chapter.startingFen);
       if (!success) {
-        console.warn('Failed to load chapter FEN, using default position');
         const fallbackSuccess = loadPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
         if (!fallbackSuccess) {
-          throw new Error('Failed to load chapter position and fallback failed');
+          throw new Error('Failed to load chapter position');
         }
       }
       
@@ -559,14 +282,8 @@ const ChessEditor: React.FC = () => {
 
   const handleMove = useCallback((sourceSquare: string, targetSquare: string): boolean => {
     try {
-      console.log('=== MOVE ATTEMPT ===');
-      console.log('ChessEditor.handleMove called:', sourceSquare, 'to', targetSquare);
-      console.log('Current mode:', modeState.mode);
-      console.log('Current position before move:', position);
-      
       // For notation-only modes, we need to validate the move but not actually make it on the board
       if (modeState.mode === 'notation-only' || modeState.mode === 'notation-with-arrows') {
-        // Create a chess instance from the CURRENT theoretical position based on our move sequence
         const tempChess = new (require('chess.js').Chess)();
         
         // Replay all moves from the sequence to get the current theoretical position
@@ -583,9 +300,6 @@ const ChessEditor: React.FC = () => {
             }
           }
           
-          console.log('Current theoretical position:', tempChess.fen());
-          console.log('Current turn:', tempChess.turn() === 'w' ? 'White' : 'Black');
-          
           // Now try to make the new move from this position
           const moveResult = tempChess.move({
             from: sourceSquare,
@@ -594,7 +308,6 @@ const ChessEditor: React.FC = () => {
           });
           
           if (moveResult) {
-            // Valid move - add to sequence but don't update the actual board
             const notation = moveResult.san;
             const moveNumber = Math.floor(modeState.moveSequence.length / 2) + 1;
             
@@ -605,10 +318,8 @@ const ChessEditor: React.FC = () => {
               moveNumber: moveNumber
             };
             
-            // Update move sequence
             const newSequence = [...modeState.moveSequence, newMove];
             
-            // Handle arrows for arrow mode
             let newArrows = [...modeState.arrows];
             if (modeState.mode === 'notation-with-arrows') {
               const arrowColor = ARROW_COLORS[Math.floor(modeState.moveSequence.length / 2) % ARROW_COLORS.length];
@@ -625,17 +336,45 @@ const ChessEditor: React.FC = () => {
               arrows: newArrows
             });
             
-            console.log('Move added to sequence:', notation);
-            console.log('New sequence length:', newSequence.length);
-            console.log('Next turn:', newSequence.length % 2 === 0 ? 'White' : 'Black');
-            console.log('=== END MOVE ATTEMPT (NOTATION MODE) ===');
             return true;
           } else {
-            console.log('Invalid move in notation mode for current turn');
             return false;
           }
         } catch (error) {
           console.log('Move validation failed:', error);
+          return false;
+        }
+      } else if (modeState.mode === 'puzzle-mode' && currentPuzzle) {
+        // Puzzle mode - check if move matches a variation
+        const matchingVariation = currentPuzzle.variations.find(v => 
+          v.move && v.move.from === sourceSquare && v.move.to === targetSquare
+        );
+
+        if (matchingVariation) {
+          // Reveal this node
+          setRevealedNodes(prev => new Set([...prev, matchingVariation.id]));
+          setCurrentMoveId(matchingVariation.id);
+          
+          // Make the actual move
+          const move = makeMove({
+            from: sourceSquare,
+            to: targetSquare,
+            promotion: 'q'
+          });
+          
+          if (requiredNodes.has(matchingVariation.id)) {
+            updateState({ error: null });
+            // Show success message
+            setTimeout(() => {
+              updateState({ error: '✅ Excellent! That\'s a key move.' });
+              setTimeout(clearMessages, 3000);
+            }, 100);
+          }
+          
+          return move !== null;
+        } else {
+          updateState({ error: '❌ This move is not part of the puzzle variations.' });
+          setTimeout(clearMessages, 3000);
           return false;
         }
       } else {
@@ -646,93 +385,43 @@ const ChessEditor: React.FC = () => {
           promotion: 'q'
         });
         
-        console.log('Move result from makeMove:', move);
-        console.log('New position after move:', position);
-        console.log('=== END MOVE ATTEMPT (NORMAL MODE) ===');
-        
-        const success = move !== null;
-        if (!success) {
-          console.warn('Move was rejected as invalid');
-        }
-        
-        return success;
+        return move !== null;
       }
     } catch (error) {
       console.error('ChessEditor.handleMove error:', error);
       handleError(error as ChessError);
       return false;
     }
-  }, [makeMove, position, handleError, modeState]);
-
-  // Get current turn for notation modes
-  const getCurrentTurn = useCallback((): 'w' | 'b' => {
-    if (modeState.mode === 'normal') {
-      return position.split(' ')[1] as 'w' | 'b';
-    } else {
-      // In notation modes, determine turn from move sequence length
-      return modeState.moveSequence.length % 2 === 0 ? 'w' : 'b';
-    }
-  }, [modeState.mode, modeState.moveSequence.length, position]);
-
-  const handleRemoveLastMove = useCallback(() => {
-    if (modeState.moveSequence.length === 0) return;
-    
-    const newSequence = modeState.moveSequence.slice(0, -1);
-    let newArrows = [...modeState.arrows];
-    
-    // Remove the last arrow if in arrow mode
-    if (modeState.mode === 'notation-with-arrows' && modeState.arrows.length > 0) {
-      newArrows = modeState.arrows.slice(0, -1);
-    }
-    
-    setModeState({
-      ...modeState,
-      moveSequence: newSequence,
-      arrows: newArrows
-    });
-    
-    console.log('Removed last move, new sequence length:', newSequence.length);
-  }, [modeState]);
-
-  const handleRemoveMove = useCallback((moveIndex: number) => {
-    if (moveIndex < 0 || moveIndex >= modeState.moveSequence.length) return;
-    
-    // Remove the move and all subsequent moves
-    const newSequence = modeState.moveSequence.slice(0, moveIndex);
-    let newArrows = [...modeState.arrows];
-    
-    // Remove corresponding arrows if in arrow mode
-    if (modeState.mode === 'notation-with-arrows') {
-      newArrows = modeState.arrows.slice(0, moveIndex);
-    }
-    
-    setModeState({
-      ...modeState,
-      moveSequence: newSequence,
-      arrows: newArrows
-    });
-    
-    console.log('Removed move at index', moveIndex, 'new sequence length:', newSequence.length);
-  }, [modeState]);
+  }, [makeMove, handleError, modeState, currentPuzzle, requiredNodes, updateState, clearMessages]);
 
   const handleModeChange = useCallback((newMode: ChessEditorMode) => {
-    console.log('Changing mode from', modeState.mode, 'to', newMode);
     setModeState({
       ...modeState,
       mode: newMode,
-      // Clear sequence when changing modes
       moveSequence: [],
       arrows: []
     });
+    
+    // Reset puzzle state when leaving puzzle mode
+    if (modeState.mode === 'puzzle-mode' && newMode !== 'puzzle-mode') {
+      setCurrentMoveId(null);
+      setRevealedNodes(new Set());
+    }
   }, [modeState]);
 
-  const handleClearSequence = useCallback(() => {
-    setModeState({
-      ...modeState,
-      moveSequence: [],
-      arrows: []
-    });
-  }, [modeState]);
+  const handlePgnImport = useCallback(async () => {
+    if (!pgnText.trim()) return;
+
+    updateState({ isLoading: true });
+    try {
+      await loadPgn(pgnText.trim());
+      setPgnText('');
+      setShowPgnImport(false);
+      updateState({ isLoading: false });
+    } catch (error) {
+      handleError('Failed to import PGN');
+    }
+  }, [pgnText, loadPgn, updateState, handleError]);
 
   const handleAddAnnotation = useCallback((moveIndex: number) => {
     if (!state.newComment.trim()) return;
@@ -775,100 +464,88 @@ const ChessEditor: React.FC = () => {
     }
   }, [state.newComment, state.annotations, state.currentStudy, state.studies, state.currentChapter, updateState, handleError]);
 
-  const handleCreateStudy = useCallback((studyData: CreateStudyData) => {
-    try {
-      const tempStudy = createNewStudy(
-        studyData.name,
-        studyData.description,
-        studyData.startingFen
-      );
+  // Puzzle-related callbacks
+  const handleLoadPuzzles = useCallback((loadedPuzzles: ChessPuzzle[]) => {
+    setPuzzles(loadedPuzzles);
+    setCurrentPuzzleIndex(0);
+    
+    if (loadedPuzzles.length > 0) {
+      const firstPuzzle = loadedPuzzles[0];
+      loadPosition(firstPuzzle.fen);
       
-      setOptimisticStudies(prev => [...prev, tempStudy]);
-      updateState({ isLoading: true, error: null });
-
-      startTransition(() => {
-        try {
-          const newStudy = createNewStudy(
-            studyData.name,
-            studyData.description,
-            studyData.startingFen
-          );
-
-          const updatedStudies = [...state.studies, newStudy];
-          updateState({ 
-            studies: updatedStudies,
-            isLoading: false
-          });
-          
-          handleLoadStudy(newStudy);
-        } catch (error) {
-          setOptimisticStudies(state.studies);
-          handleError('Failed to create study');
-        }
-      });
-    } catch (error) {
-      setOptimisticStudies(state.studies);
-      handleError('Failed to create study');
+      // Initialize required nodes
+      const requiredNodesSet = new Set(
+        firstPuzzle.variations
+          .filter(v => v.isRequired)
+          .map(v => v.id)
+      );
+      setRequiredNodes(requiredNodesSet);
+      setRevealedNodes(new Set(['move-1'])); // Reveal first move
+      setCurrentMoveId(null);
     }
-  }, [state.studies, updateState, handleError, handleLoadStudy, startTransition]);
+  }, [loadPosition]);
 
-  const handleDeleteStudy = useCallback((studyId: string) => {
-    try {
-      const originalStudies = state.studies;
-      const updatedStudies = state.studies.filter(study => study.id !== studyId);
-      setOptimisticStudies(updatedStudies);
+  const handleVariationMoveClick = useCallback((nodeId: string, fen: string) => {
+    setCurrentMoveId(nodeId);
+    loadPosition(fen);
+  }, [loadPosition]);
 
-      startTransition(() => {
-        try {
-          updateState({ studies: updatedStudies });
-
-          if (state.currentStudy && state.currentStudy.id === studyId) {
-            if (updatedStudies.length > 0) {
-              handleLoadStudy(updatedStudies[0]);
-            } else {
-              updateState({ 
-                currentStudy: null,
-                currentChapter: 0,
-                annotations: {}
-              });
-            }
-          }
-        } catch (error) {
-          setOptimisticStudies(originalStudies);
-          handleError('Failed to delete study');
-        }
-      });
-    } catch (error) {
-      handleError('Failed to delete study');
-    }
-  }, [state.studies, state.currentStudy, updateState, handleError, handleLoadStudy, startTransition]);
-
-  const handleResetGame = useCallback(() => {
-    try {
-      resetGame();
-      updateState({ error: null });
-      // Clear sequence when resetting
-      setModeState({
-        ...modeState,
-        moveSequence: [],
-        arrows: []
-      });
-    } catch (error) {
-      handleError('Failed to reset game');
-    }
-  }, [resetGame, updateState, handleError, modeState]);
-
-  const handleGoToMove = useCallback((moveIndex: number) => {
-    try {
-      const success = goToMove(moveIndex);
-      if (!success) {
-        throw new Error('Failed to navigate to move');
+  const handleToggleRequired = useCallback((nodeId: string, required: boolean) => {
+    if (!isInstructorMode || !currentPuzzle) return;
+    
+    setRequiredNodes(prev => {
+      const newSet = new Set(prev);
+      if (required) {
+        newSet.add(nodeId);
+      } else {
+        newSet.delete(nodeId);
       }
-      updateState({ error: null });
-    } catch (error) {
-      handleError('Failed to navigate to move');
+      return newSet;
+    });
+    
+    // Update the puzzle data
+    const updatedPuzzles = puzzles.map(puzzle => {
+      if (puzzle.id === currentPuzzle.id) {
+        const updatedVariations = puzzle.variations.map(variation =>
+          variation.id === nodeId ? { ...variation, isRequired: required } : variation
+        );
+        
+        const updatedRequiredVariations = required
+          ? [...puzzle.requiredVariations, nodeId]
+          : puzzle.requiredVariations.filter(id => id !== nodeId);
+
+        return {
+          ...puzzle,
+          variations: updatedVariations,
+          requiredVariations: updatedRequiredVariations
+        };
+      }
+      return puzzle;
+    });
+    
+    setPuzzles(updatedPuzzles);
+  }, [isInstructorMode, currentPuzzle, puzzles]);
+
+  // Load the first study by default (only on client)
+  useEffect(() => {
+    if (isClient && state.studies.length > 0 && !state.currentStudy) {
+      try {
+        handleLoadStudy(state.studies[0]);
+      } catch (error) {
+        console.error('Failed to auto-load first study:', error);
+        updateState({ error: 'Failed to load default study' });
+      }
     }
-  }, [goToMove, updateState, handleError]);
+  }, [state.studies, state.currentStudy, isClient, handleLoadStudy, updateState]);
+
+  // Sort studies by last updated
+  const sortedStudies = useMemo(() => {
+    return [...deferredStudies].sort((a, b) => {
+      const dateA = new Date(a.updatedAt || a.createdAt);
+      const dateB = new Date(b.updatedAt || b.createdAt);
+      return dateB.getTime() - dateA.getTime();
+    });
+  }, [deferredStudies]);
 
   // Prevent hydration mismatch
   if (!isClient) {
@@ -877,21 +554,6 @@ const ChessEditor: React.FC = () => {
         <div className="loading-spinner">
           <div className="spinner"></div>
           <span>Initializing chess editor...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (asyncError) {
-    throw asyncError;
-  }
-
-  if (state.isLoading || isPending) {
-    return (
-      <div className="chess-editor loading">
-        <div className="loading-spinner">
-          <div className="spinner"></div>
-          <span>Loading...</span>
         </div>
       </div>
     );
@@ -913,7 +575,7 @@ const ChessEditor: React.FC = () => {
             <div className="error-message">
               <span>⚠️ {state.error}</span>
               <button 
-                onClick={() => updateState({ error: null })}
+                onClick={clearMessages}
                 className="error-dismiss"
                 aria-label="Dismiss error"
               >
@@ -922,15 +584,8 @@ const ChessEditor: React.FC = () => {
             </div>
           )}
           
-          {/* Mode Selector */}
-          <ModeSelector
-            currentMode={modeState.mode}
-            onModeChange={handleModeChange}
-            onClearSequence={handleClearSequence}
-          />
-          
-          <div className="study-selector">
-            {state.currentStudy && (
+          <div className="study-info-bar">
+            {state.currentStudy ? (
               <>
                 <h2>{state.currentStudy.name}</h2>
                 <div className="chapter-tabs">
@@ -946,12 +601,79 @@ const ChessEditor: React.FC = () => {
                   ))}
                 </div>
               </>
+            ) : (
+              <p>No study loaded</p>
             )}
+            
+            <button
+              className="manage-studies-btn"
+              onClick={() => setShowStudyManager(!showStudyManager)}
+              type="button"
+            >
+              📚 Manage Studies
+            </button>
           </div>
         </div>
 
         <div className="chess-editor-content">
           <div className="chess-board-section">
+            {/* Mode Selector */}
+            <div className="mode-selector">
+              <h4>🎮 Editor Mode</h4>
+              <div className="mode-buttons">
+                <button
+                  className={`mode-btn ${modeState.mode === 'normal' ? 'active' : ''}`}
+                  onClick={() => handleModeChange('normal')}
+                  title="Normal chess play with piece movement"
+                >
+                  <span className="mode-icon">♟️</span>
+                  <span className="mode-name">Normal</span>
+                  <small>Pieces move normally</small>
+                </button>
+                
+                <button
+                  className={`mode-btn ${modeState.mode === 'notation-only' ? 'active' : ''}`}
+                  onClick={() => handleModeChange('notation-only')}
+                  title="Record moves without moving pieces"
+                >
+                  <span className="mode-icon">📝</span>
+                  <span className="mode-name">Notation Only</span>
+                  <small>Generate notation</small>
+                </button>
+                
+                <button
+                  className={`mode-btn ${modeState.mode === 'notation-with-arrows' ? 'active' : ''}`}
+                  onClick={() => handleModeChange('notation-with-arrows')}
+                  title="Record moves with colored arrows"
+                >
+                  <span className="mode-icon">🏹</span>
+                  <span className="mode-name">Arrows & Notation</span>
+                  <small>Show arrows + notation</small>
+                </button>
+                
+                <button
+                  className={`mode-btn ${modeState.mode === 'puzzle-mode' ? 'active' : ''}`}
+                  onClick={() => handleModeChange('puzzle-mode')}
+                  title="Puzzle solving mode with variation trees"
+                >
+                  <span className="mode-icon">🧩</span>
+                  <span className="mode-name">Puzzle Mode</span>
+                  <small>Study with variations</small>
+                </button>
+              </div>
+              
+              {modeState.mode === 'puzzle-mode' && (
+                <div className="puzzle-mode-controls">
+                  <button
+                    className={`instructor-toggle ${isInstructorMode ? 'active' : ''}`}
+                    onClick={() => setIsInstructorMode(!isInstructorMode)}
+                  >
+                    {isInstructorMode ? '👨‍🏫 Instructor' : '👨‍🎓 Student'} View
+                  </button>
+                </div>
+              )}
+            </div>
+
             <ChessBoard
               position={position}
               onMove={handleMove}
@@ -963,16 +685,23 @@ const ChessEditor: React.FC = () => {
             
             <div className="game-controls">
               <button 
-                onClick={handleResetGame} 
+                onClick={resetGame} 
                 className="control-btn"
                 type="button"
               >
                 Reset Game
               </button>
+              <button
+                onClick={() => setShowPgnImport(true)}
+                className="control-btn"
+                type="button"
+              >
+                📥 Import PGN
+              </button>
               {modeState.mode === 'normal' && (
                 <>
                   <button 
-                    onClick={() => handleGoToMove(0)} 
+                    onClick={() => goToMove(0)} 
                     className="control-btn"
                     disabled={currentMoveIndex === 0}
                     type="button"
@@ -980,7 +709,7 @@ const ChessEditor: React.FC = () => {
                     ⏮ Start
                   </button>
                   <button 
-                    onClick={() => handleGoToMove(currentMoveIndex - 1)} 
+                    onClick={() => goToMove(currentMoveIndex - 1)} 
                     className="control-btn"
                     disabled={currentMoveIndex === 0}
                     type="button"
@@ -988,7 +717,7 @@ const ChessEditor: React.FC = () => {
                     ◀ Previous
                   </button>
                   <button 
-                    onClick={() => handleGoToMove(currentMoveIndex + 1)} 
+                    onClick={() => goToMove(currentMoveIndex + 1)} 
                     className="control-btn"
                     disabled={currentMoveIndex >= moveHistory.length}
                     type="button"
@@ -996,7 +725,7 @@ const ChessEditor: React.FC = () => {
                     Next ▶
                   </button>
                   <button 
-                    onClick={() => handleGoToMove(moveHistory.length)} 
+                    onClick={() => goToMove(moveHistory.length)} 
                     className="control-btn"
                     disabled={currentMoveIndex >= moveHistory.length}
                     type="button"
@@ -1014,78 +743,61 @@ const ChessEditor: React.FC = () => {
               </div>
             )}
 
-            {/* Current Position Info */}
-            <div className="position-summary">
-              <h4>Current Position</h4>
-              <div className="position-details">
-                <div className="detail-item">
-                  <strong>Turn:</strong> {getCurrentTurn() === 'w' ? 'White' : 'Black'}
-                </div>
-                <div className="detail-item">
-                  <strong>Move:</strong> 
-                  {modeState.mode === 'normal' 
-                    ? `${currentMoveIndex} / ${moveHistory.length}`
-                    : `${modeState.moveSequence.length} recorded`
-                  }
-                </div>
-                <div className="detail-item">
-                  <strong>Mode:</strong> 
-                  <span className={`mode-indicator ${modeState.mode}`}>
-                    {modeState.mode === 'normal' ? 'Normal' : 
-                     modeState.mode === 'notation-only' ? 'Notation Only' : 'Arrows & Notation'}
-                  </span>
-                </div>
-                {gameState.isCheck && modeState.mode === 'normal' && (
-                  <div className="detail-item check-warning">
-                    <strong>⚠️ Check!</strong>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Turn Indicator */}
-            <TurnIndicator
-              currentTurn={getCurrentTurn()}
-              mode={modeState.mode}
-              moveCount={modeState.mode === 'normal' ? moveHistory.length : modeState.moveSequence.length}
-            />
+            {/* Puzzle Manager for Puzzle Mode */}
+            {modeState.mode === 'puzzle-mode' && (
+              <EnhancedPuzzleManager
+                onLoadPosition={loadPosition}
+                onLoadPuzzles={handleLoadPuzzles}
+                isInstructor={isInstructorMode}
+              />
+            )}
           </div>
 
           <div className="chess-sidebar">
-            {/* Solution Display for notation modes */}
-            {(modeState.mode === 'notation-only' || modeState.mode === 'notation-with-arrows') && (
-              <SolutionDisplay
-                moveSequence={modeState.moveSequence}
-                mode={modeState.mode}
-                onRemoveMove={handleRemoveMove}
-                onRemoveLastMove={handleRemoveLastMove}
-              />
+            {/* Variation Tree for Puzzle Mode */}
+            {modeState.mode === 'puzzle-mode' && currentPuzzle && (
+              <div className="variation-tree-section">
+                <HorizontalVariationTree
+                  variations={currentPuzzle.variations}
+                  currentMoveId={currentMoveId}
+                  onMoveClick={handleVariationMoveClick}
+                  onToggleRequired={handleToggleRequired}
+                  isInstructor={isInstructorMode}
+                  requiredNodes={requiredNodes}
+                  revealedNodes={revealedNodes}
+                  showOnlyRequired={false}
+                  title={currentPuzzle.title}
+                />
+              </div>
             )}
-            
+
             <div className="move-list-section">
               <h3>Move List</h3>
               {modeState.mode === 'normal' ? (
                 <MoveList
                   moves={moveHistory}
                   currentMoveIndex={currentMoveIndex}
-                  onMoveClick={handleGoToMove}
+                  onMoveClick={goToMove}
                   annotations={state.annotations}
                 />
+              ) : modeState.mode === 'puzzle-mode' ? (
+                <div className="puzzle-mode-moves">
+                  <p>Moves are shown in the variation tree above</p>
+                </div>
               ) : (
                 <div className="notation-mode-moves">
-                  <p>In {modeState.mode} mode - see Solution panel for recorded moves</p>
+                  <p>In {modeState.mode} mode - moves are recorded separately</p>
+                  {modeState.moveSequence.length > 0 && (
+                    <div className="recorded-moves">
+                      {modeState.moveSequence.map((move, index) => (
+                        <span key={index} className="recorded-move">
+                          {move.notation}{' '}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-              
-              {/* Move Input for algebraic notation */}
-              <div className="move-input-section">
-                <h4>Enter Move (Algebraic Notation)</h4>
-                <MoveInput 
-                  onMove={handleMove} 
-                  mode={modeState.mode}
-                  moveSequence={modeState.moveSequence}
-                />
-              </div>
             </div>
 
             <div className="annotation-section">
@@ -1108,19 +820,179 @@ const ChessEditor: React.FC = () => {
                 </button>
               </div>
             </div>
-
-            <div className="study-manager-section">
-              <h3>Study Management</h3>
-              <StudyManager
-                studies={optimisticStudies}
-                currentStudy={state.currentStudy}
-                onStudySelect={handleLoadStudy}
-                onCreateStudy={handleCreateStudy}
-                onDeleteStudy={handleDeleteStudy}
-              />
-            </div>
           </div>
         </div>
+
+        {/* Study Manager Modal */}
+        {showStudyManager && (
+          <div className="modal-overlay" onClick={() => setShowStudyManager(false)}>
+            <div className="study-manager-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Study Manager</h2>
+                <button 
+                  className="close-btn"
+                  onClick={() => setShowStudyManager(false)}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-content">
+                <div className="study-actions">
+                  <button
+                    className="create-study-btn primary"
+                    onClick={() => setShowCreateForm(!showCreateForm)}
+                    type="button"
+                  >
+                    {showCreateForm ? 'Cancel' : '+ New Study'}
+                  </button>
+                </div>
+
+                {showCreateForm && (
+                  <form className="create-study-form" onSubmit={handleCreateStudy}>
+                    <div className="form-group">
+                      <label htmlFor="study-name">
+                        Study Name <span className="required">*</span>
+                      </label>
+                      <input
+                        id="study-name"
+                        type="text"
+                        value={createFormData.name}
+                        onChange={(e) => setCreateFormData({ ...createFormData, name: e.target.value })}
+                        placeholder="Enter study name..."
+                        required
+                      />
+                      {formErrors.name && (
+                        <span className="error-text">{formErrors.name}</span>
+                      )}
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="study-description">Description</label>
+                      <textarea
+                        id="study-description"
+                        value={createFormData.description}
+                        onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
+                        placeholder="Describe what this study covers..."
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="starting-fen">Starting Position (FEN)</label>
+                      <input
+                        id="starting-fen"
+                        type="text"
+                        value={createFormData.startingFen}
+                        onChange={(e) => setCreateFormData({ ...createFormData, startingFen: e.target.value })}
+                        placeholder="Leave empty for starting position..."
+                      />
+                    </div>
+
+                    <div className="form-actions">
+                      <button type="submit" className="submit-btn primary">
+                        Create Study
+                      </button>
+                      <button 
+                        type="button" 
+                        className="cancel-btn secondary"
+                        onClick={() => setShowCreateForm(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="study-list">
+                  <h3>Your Studies ({sortedStudies.length})</h3>
+                  
+                  {sortedStudies.length === 0 ? (
+                    <div className="no-studies">
+                      <p>No studies yet. Create your first study!</p>
+                    </div>
+                  ) : (
+                    <div className="studies">
+                      {sortedStudies.map((study) => (
+                        <div
+                          key={study.id}
+                          className={`study-item ${state.currentStudy?.id === study.id ? 'active' : ''}`}
+                        >
+                          <div className="study-content" onClick={() => handleLoadStudy(study)}>
+                            <h4>{study.name}</h4>
+                            {study.description && <p>{study.description}</p>}
+                            <div className="study-meta">
+                              <span>{study.chapters.length} chapters</span>
+                              <span>Updated {formatRelativeTime(study.updatedAt || study.createdAt)}</span>
+                            </div>
+                          </div>
+                          <div className="study-actions-menu">
+                            <button
+                              className="delete-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteStudy(study.id);
+                              }}
+                              title="Delete study"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PGN Import Modal */}
+        {showPgnImport && (
+          <div className="modal-overlay" onClick={() => setShowPgnImport(false)}>
+            <div className="pgn-import-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Import PGN</h3>
+                <button
+                  className="close-btn"
+                  onClick={() => setShowPgnImport(false)}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="modal-content">
+                <textarea
+                  value={pgnText}
+                  onChange={(e) => setPgnText(e.target.value)}
+                  placeholder="Paste PGN content here..."
+                  rows={12}
+                  className="pgn-textarea"
+                />
+                
+                <div className="modal-actions">
+                  <button
+                    className="import-btn primary"
+                    onClick={handlePgnImport}
+                    disabled={!pgnText.trim() || state.isLoading}
+                  >
+                    {state.isLoading ? 'Loading...' : 'Import Game'}
+                  </button>
+                  <button
+                    className="cancel-btn secondary"
+                    onClick={() => {
+                      setShowPgnImport(false);
+                      setPgnText('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Suspense>
   );

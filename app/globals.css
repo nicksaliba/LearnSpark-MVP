@@ -367,3 +367,21 @@ body {
 }
 
 @import '../components/chess/HorizontalVariationTree.css';
+
+/* Add to your global.css or styles file */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.delay-100 {
+  animation-delay: 100ms;
+}
+
+.delay-200 {
+  animation-delay: 200ms;
+}

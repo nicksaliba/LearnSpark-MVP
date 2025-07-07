@@ -1,9 +1,9 @@
-// components/chess/ChessBoard.tsx - Fixed Version
+// components/chess/ChessBoard.tsx - Improved Version
 'use client';
 
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
 import { Chessboard } from 'react-chessboard';
-import { ChessBoardProps, SquareStyles, Square, CustomPieceProps } from '../../types/chess';
+import { ChessBoardProps, SquareStyles, Square } from '../../types/chess';
 
 interface ArrowData {
   from: string;
@@ -27,29 +27,17 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
   const [moveFrom, setMoveFrom] = useState<string>('');
   const [optionSquares, setOptionSquares] = useState<SquareStyles>({});
   const [boardKey, setBoardKey] = useState<number>(0);
-  const [isMounted, setIsMounted] = useState(false);
-  const [localPosition, setLocalPosition] = useState<string>(position);
 
+  // Update board when position changes
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Update local position when prop changes
-  useEffect(() => {
-    console.log('Position changed:', position);
-    setLocalPosition(position);
     setBoardKey(prev => prev + 1);
-  }, [position]);
-
-  // Clear move selection when position changes
-  useEffect(() => {
     setMoveFrom('');
     setOptionSquares({});
   }, [position]);
 
   // Get the last move for highlighting
   const getLastMove = useCallback((): { from: string; to: string } | null => {
-    if (moveHistory.length > 0 && currentMoveIndex >= 0) {
+    if (moveHistory.length > 0 && currentMoveIndex > 0) {
       const moveIndex = Math.min(currentMoveIndex - 1, moveHistory.length - 1);
       const lastMove = moveHistory[moveIndex];
       if (lastMove) {
@@ -83,12 +71,13 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
   const handleSquareClick = useCallback((square: Square) => {
     if (disabled) return;
 
-    console.log('Square clicked:', square, 'moveFrom:', moveFrom);
-
+    // Clear previous option squares
     setOptionSquares({});
 
+    // First click - select piece
     if (!moveFrom) {
       setMoveFrom(square);
+      // Highlight the selected square
       setOptionSquares({
         [square]: {
           background: 'radial-gradient(circle, rgba(0,0,0,.1) 85%, transparent 85%)',
@@ -97,20 +86,17 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
       return;
     }
 
+    // Second click - same square (deselect)
     if (moveFrom === square) {
       setMoveFrom('');
-      setOptionSquares({});
       return;
     }
 
-    console.log('Attempting move from', moveFrom, 'to', square);
+    // Second click - different square (attempt move)
     const moveResult = onMove(moveFrom, square);
-    
-    console.log('Move result:', moveResult);
     
     if (moveResult) {
       setMoveFrom('');
-      setOptionSquares({});
     } else {
       // If move failed, select the new square
       setMoveFrom(square);
@@ -124,12 +110,8 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
 
   const handlePieceDrop = useCallback((sourceSquare: string, targetSquare: string): boolean => {
     if (disabled) return false;
-
-    console.log('Piece dropped from', sourceSquare, 'to', targetSquare);
     
     const moveResult = onMove(sourceSquare, targetSquare);
-    console.log('Drop move result:', moveResult);
-    
     setMoveFrom('');
     setOptionSquares({});
     return moveResult;
@@ -140,158 +122,69 @@ const ChessBoard: React.FC<ExtendedChessBoardProps> = ({
     ...optionSquares
   }), [highlightStyles, optionSquares]);
 
-  // Custom pieces using your SVG files
-  const customPieces = useMemo(() => {
-    const pieces = ['wP', 'wN', 'wB', 'wR', 'wQ', 'wK', 'bP', 'bN', 'bB', 'bR', 'bQ', 'bK'];
-    
-    return pieces.reduce((acc, piece) => {
-      acc[piece] = ({ squareWidth, isDragging }: CustomPieceProps) => (
-        <div
-          style={{
-            width: squareWidth,
-            height: squareWidth,
-            backgroundImage: `url(/chess-pieces/${piece}.svg)`,
-            backgroundSize: '85%',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'center',
-            opacity: isDragging ? 0.5 : 1,
-            transition: 'opacity 0.2s ease-in-out',
-            cursor: disabled ? 'default' : 'grab'
-          }}
-        />
-      );
-      return acc;
-    }, {} as { [piece: string]: React.ComponentType<CustomPieceProps> });
-  }, [disabled]);
+  // Board size calculation for responsiveness
+  const [boardSize, setBoardSize] = useState(600);
 
-  const positionInfo = useMemo(() => {
-    const parts = localPosition.split(' ');
-    return {
-      board: parts[0] || '',
-      turn: parts[1] === 'w' ? 'White' : 'Black',
-      castling: parts[2] || '-',
-      enPassant: parts[3] || '-',
-      halfmove: parseInt(parts[4] || '0', 10),
-      fullmove: parseInt(parts[5] || '1', 10)
+  useEffect(() => {
+    const updateBoardSize = () => {
+      const maxSize = Math.min(600, window.innerWidth - 40);
+      setBoardSize(maxSize);
     };
-  }, [localPosition]);
 
-  if (!isMounted) {
-    return (
-      <div className="chess-board-container">
-        <div className="board-wrapper">
-          <div className="board-placeholder">
-            <div className="placeholder-grid">
-              {Array.from({ length: 64 }).map((_, i) => (
-                <div 
-                  key={i} 
-                  className={`placeholder-square ${(Math.floor(i / 8) + i) % 2 === 0 ? 'dark' : 'light'}`}
-                />
-              ))}
-            </div>
-            <div className="loading-overlay">
-              <div className="spinner"></div>
-              <span>Loading board...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    updateBoardSize();
+    window.addEventListener('resize', updateBoardSize);
+    return () => window.removeEventListener('resize', updateBoardSize);
+  }, []);
 
   return (
     <div className="chess-board-container">
       <div className="board-wrapper">
         <Chessboard
           key={boardKey}
-          position={localPosition}
+          position={position}
           onPieceDrop={handlePieceDrop}
           onSquareClick={handleSquareClick}
           customSquareStyles={customSquareStyles}
           boardOrientation={orientation}
-          animationDuration={300}
+          animationDuration={200}
           areArrowsAllowed={true}
           arePiecesDraggable={!disabled}
           customBoardStyle={{
             borderRadius: '8px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-            border: '2px solid #e9ecef'
           }}
           customDarkSquareStyle={{ 
-            backgroundColor: '#779952',
-            border: '1px solid #6b8e4b'
+            backgroundColor: '#779952'
           }}
           customLightSquareStyle={{ 
-            backgroundColor: '#edeed1',
-            border: '1px solid #d7d9c2'
+            backgroundColor: '#edeed1'
           }}
-          customPieces={customPieces}
           customDropSquareStyle={{
             boxShadow: 'inset 0 0 1px 6px rgba(255,255,255,0.75)'
           }}
-          customPremoveDarkSquareStyle={{ backgroundColor: '#CF664E' }}
-          customPremoveLightSquareStyle={{ backgroundColor: '#F7EC74' }}
           customArrows={chessboardArrows}
-          customArrowColor="#rgb(255,170,0)"
-          boardWidth={Math.min(600, window.innerWidth - 40)}
+          customArrowColor="rgb(255,170,0)"
+          boardWidth={boardSize}
         />
       </div>
       
-      <div className="board-info">
-        <div className="position-info">
-          <div className="info-row">
-            <strong>Turn:</strong> 
-            <span className={`turn-indicator ${positionInfo.turn.toLowerCase()}`}>
-              {positionInfo.turn}
-            </span>
+      {/* Board status indicators */}
+      <div className="board-status">
+        {disabled && (
+          <div className="status-badge disabled">
+            Board Disabled
           </div>
-          <div className="info-row">
-            <strong>Move:</strong> 
-            <span>{currentMoveIndex} / {moveHistory.length}</span>
+        )}
+        {moveFrom && !disabled && (
+          <div className="status-badge selected">
+            Selected: {moveFrom}
           </div>
-          <div className="info-row">
-            <strong>Position:</strong> 
-            <span className="fen-display" title={localPosition}>
-              {localPosition.split(' ')[0]}
-            </span>
+        )}
+        {arrows.length > 0 && (
+          <div className="status-badge arrows">
+            {arrows.length} arrow{arrows.length !== 1 ? 's' : ''}
           </div>
-          {arrows.length > 0 && (
-            <div className="info-row">
-              <strong>Arrows:</strong> 
-              <span>{arrows.length} shown</span>
-            </div>
-          )}
-          {positionInfo.castling !== '-' && (
-            <div className="info-row">
-              <strong>Castling:</strong> 
-              <span>{positionInfo.castling}</span>
-            </div>
-          )}
-          {positionInfo.enPassant !== '-' && (
-            <div className="info-row">
-              <strong>En passant:</strong> 
-              <span>{positionInfo.enPassant}</span>
-            </div>
-          )}
-        </div>
-        
-        <div className="game-status">
-          {disabled && (
-            <div className="status-message warning">
-              Board is disabled
-            </div>
-          )}
-          {moveFrom && !disabled && (
-            <div className="status-message info">
-              Selected: {moveFrom}
-            </div>
-          )}
-          {arrows.length > 0 && (
-            <div className="status-message success">
-              Showing {arrows.length} arrow{arrows.length !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
