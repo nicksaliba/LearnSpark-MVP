@@ -1,4 +1,4 @@
-// prisma/seeds/phase1-seed.ts
+// prisma/seeds/phase1-seed.ts - Fixed version
 import { PrismaClient, UserRole, GradeLevel } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { seedAIModules } from './aiModules'
@@ -55,7 +55,8 @@ async function main() {
       username: 'SuperAdmin',
       passwordHash: hashedPassword,
       role: UserRole.SUPER_ADMIN,
-      verified: true,
+      xpTotal: 10000,
+      level: 10,
     }
   })
   
@@ -69,7 +70,8 @@ async function main() {
       passwordHash: hashedPassword,
       role: UserRole.ADMIN,
       schoolId: school.id,
-      verified: true,
+      xpTotal: 5000,
+      level: 5,
     }
   })
   
@@ -83,7 +85,9 @@ async function main() {
       passwordHash: hashedPassword,
       role: UserRole.TEACHER,
       schoolId: school.id,
-      verified: true,
+      gradeLevel: GradeLevel.K2,
+      xpTotal: 2000,
+      level: 3,
     }
   })
   
@@ -96,7 +100,9 @@ async function main() {
       passwordHash: hashedPassword,
       role: UserRole.TEACHER,
       schoolId: school.id,
-      verified: true,
+      gradeLevel: GradeLevel.G35,
+      xpTotal: 2500,
+      level: 4,
     }
   })
   
@@ -119,8 +125,7 @@ async function main() {
         passwordHash: hashedPassword,
         role: UserRole.STUDENT,
         schoolId: school.id,
-        verified: true,
-        xp: Math.floor(Math.random() * 1000),
+        xpTotal: Math.floor(Math.random() * 1000),
         level: Math.floor(Math.random() * 5) + 1,
       }
     })
@@ -132,7 +137,7 @@ async function main() {
   await seedAIModules()
   
   // Create sample ethics modules
-  await prisma.aIEthicsModule.createMany({
+  const ethicsModules = await prisma.aIEthicsModule.createMany({
     data: [
       {
         title: 'Is it Fair? Understanding AI Bias',
@@ -200,7 +205,7 @@ async function main() {
   console.log('✅ Created ethics modules')
   
   // Create sample teacher resources
-  await prisma.teacherResource.createMany({
+  const resources = await prisma.teacherResource.createMany({
     data: [
       {
         title: 'Introduction to AI - Lesson Plan',
@@ -219,13 +224,120 @@ async function main() {
         content: '# AI Ethics Discussion Guide\n\n## Key Topics\n1. What makes something fair?\n2. How do computers learn?\n3. Why might a computer make unfair decisions?\n\n## Discussion Prompts\n- "Have you ever been treated unfairly?"\n- "How do we make sure everyone gets a fair chance?"\n- "What rules should computers follow?"',
         authorId: teacher2.id,
         tags: ['Ethics', 'AI', 'Discussion', 'Fairness'],
+      },
+      {
+        title: 'Teachable Machine Activity Worksheet',
+        description: 'Step-by-step worksheet for students to create their first AI model',
+        resourceType: 'WORKSHEET',
+        gradeLevel: GradeLevel.G35,
+        content: '# Teachable Machine Worksheet\n\n## Your Mission\nTrain a computer to recognize different objects!\n\n## Steps\n1. Go to teachablemachine.withgoogle.com\n2. Choose "Image Project"\n3. Create classes for your objects\n4. Take pictures of each object\n5. Train your model\n6. Test it!\n\n## Reflection\n- What worked well?\n- What was challenging?\n- How could you improve your model?',
+        authorId: teacher1.id,
+        tags: ['Teachable Machine', 'Hands-on', 'AI Training'],
       }
     ]
   })
   
   console.log('✅ Created teacher resources')
   
-  console.log('🎉 Phase 1 seed completed!')
+  // Create sample achievements
+  const achievements = await prisma.achievement.createMany({
+    data: [
+      {
+        name: 'First Steps',
+        description: 'Complete your first AI lesson',
+        icon: '🌟',
+        xpReward: 50,
+        criteria: {
+          type: 'lesson_completed',
+          count: 1
+        }
+      },
+      {
+        name: 'AI Explorer',
+        description: 'Complete 5 AI lessons',
+        icon: '🔍',
+        xpReward: 200,
+        criteria: {
+          type: 'lessons_completed',
+          count: 5
+        }
+      },
+      {
+        name: 'Model Trainer',
+        description: 'Train your first AI model',
+        icon: '🤖',
+        xpReward: 150,
+        criteria: {
+          type: 'model_trained',
+          count: 1
+        }
+      },
+      {
+        name: 'Ethics Expert',
+        description: 'Complete all ethics modules',
+        icon: '⚖️',
+        xpReward: 300,
+        criteria: {
+          type: 'ethics_completed',
+          count: 1
+        }
+      },
+      {
+        name: 'Code Creator',
+        description: 'Write your first AI program',
+        icon: '💻',
+        xpReward: 175,
+        criteria: {
+          type: 'code_written',
+          count: 1
+        }
+      }
+    ]
+  })
+  
+  console.log('✅ Created achievements')
+  
+  // Create some sample progress for students
+  console.log('🎯 Creating sample progress...')
+  
+  // Get first lesson from each module
+  const firstLessons = await prisma.aILesson.findMany({
+    where: { orderIndex: 1 },
+    take: 3
+  })
+  
+  const students_db = await prisma.user.findMany({
+    where: { role: UserRole.STUDENT }
+  })
+  
+  // Create some progress for students
+  for (const lesson of firstLessons) {
+    for (let i = 0; i < Math.min(3, students_db.length); i++) {
+      const student = students_db[i]
+      await prisma.aIProgress.create({
+        data: {
+          userId: student.id,
+          lessonId: lesson.id,
+          status: i === 0 ? 'COMPLETED' : i === 1 ? 'IN_PROGRESS' : 'NOT_STARTED',
+          score: i === 0 ? 85 : i === 1 ? 45 : 0,
+          timeSpent: i === 0 ? 1800 : i === 1 ? 900 : 0, // seconds
+          attempts: i === 0 ? 2 : i === 1 ? 1 : 0,
+          completedAt: i === 0 ? new Date() : null,
+        }
+      })
+    }
+  }
+  
+  console.log('✅ Created sample progress')
+  
+  console.log('🎉 Phase 1 seed completed successfully!')
+  console.log('\n📧 Demo Login Credentials:')
+  console.log('Super Admin: superadmin@platform.com / demo123')
+  console.log('School Admin: admin@school.edu / demo123')
+  console.log('Teacher 1: teacher1@school.edu / demo123')
+  console.log('Teacher 2: teacher2@school.edu / demo123')
+  console.log('Student: student1@school.edu / demo123')
+  console.log('\n🚀 You can now run: npm run dev')
 }
 
 main()

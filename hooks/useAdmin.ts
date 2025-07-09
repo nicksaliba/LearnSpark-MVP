@@ -4,6 +4,38 @@ import { fetcher } from '@/lib/swr'
 import { showToast } from '@/lib/toast'
 import { useState, useCallback } from 'react'
 
+export function useAdminActions(options?: {
+  limit?: number
+  category?: AdminAction['category']
+  severity?: AdminAction['severity']
+}) {
+  const { limit = 50, category, severity } = options || {}
+  
+  const params = new URLSearchParams()
+  if (limit) params.append('limit', limit.toString())
+  if (category) params.append('category', category)
+  if (severity) params.append('severity', severity)
+  
+  const { data, error, isLoading, mutate } = useSWR(
+    `/api/admin/actions?${params.toString()}`,
+    fetcher,
+    {
+      revalidateOnFocus: true,
+      refreshInterval: 30000, // Refresh every 30 seconds
+      dedupingInterval: 5000,
+    }
+  )
+  
+  return {
+    actions: data?.actions || [],
+    isLoading,
+    isError: error,
+    refetch: mutate,
+    refresh: () => mutate(),
+  }
+}
+
+
 // Admin Statistics
 export function useAdminStats() {
   const { data, error, isLoading } = useSWR(
@@ -189,6 +221,7 @@ export function useAdminSchools(params?: {
   }
 }
 
+
 // Analytics
 export function useAdminAnalytics(params?: {
   range?: string
@@ -261,5 +294,26 @@ export function useAuditLogs(params?: {
     pagination: data?.pagination,
     isLoading,
     isError: error
+  }
+}
+
+
+// Log Admin Action (utility function)
+export async function logAdminAction(action: Omit<AdminAction, 'id' | 'timestamp'>) {
+  try {
+    const response = await fetch('/api/admin/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...action,
+        timestamp: new Date().toISOString(),
+      }),
+    })
+    
+    if (!response.ok) {
+      console.error('Failed to log admin action')
+    }
+  } catch (error) {
+    console.error('Error logging admin action:', error)
   }
 }

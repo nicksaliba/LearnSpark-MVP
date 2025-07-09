@@ -5,7 +5,7 @@ import { PlatformOverview } from '@/components/admin/dashboard/PlatformOverview'
 import { SystemHealth } from '@/components/admin/dashboard/SystemHealth'
 import { UserGrowth } from '@/components/admin/dashboard/UserGrowth'
 import { RecentActions } from '@/components/admin/dashboard/RecentActions'
-import { QuickStats } from '@/components/admin/dashboard/QuickStats'
+import { QuickStats } from '@/components/admin/dashboard/Quickstats'
 
 export const metadata: Metadata = {
   title: 'Admin Dashboard - AI Education Platform',
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default async function AdminDashboard() {
   const session = await requireAdmin()
-  const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   return (
     <div className="space-y-6">
