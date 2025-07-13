@@ -1,12 +1,15 @@
-// app/layout.tsx - Updated layout with toast support
-import type { Metadata } from 'next'
-import './globals.css'
-import { SessionWrapper } from '@/components/auth/session-wrapper'
-import { ToastProvider } from '@/components/providers/toast-provider'
+// app/layout.tsx - Root Layout with Session Provider
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import "./globals.css"
+import { SessionWrapper } from "@/components/auth/session-wrapper"
+import { ToastProvider } from "@/components/providers/toast-provider"
+
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: 'LearnSpark',
-  description: 'Gamified Learning Platform',
+  title: "LearnSpark - AI Education Platform",
+  description: "Learn AI, coding, and more with interactive lessons",
 }
 
 export default function RootLayout({
@@ -16,10 +19,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+      <body className={inter.className}>
         <SessionWrapper>
-          {children}
           <ToastProvider />
+          {children}
         </SessionWrapper>
       </body>
     </html>

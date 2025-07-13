@@ -1,10 +1,11 @@
-// lib/auth.ts - NextAuth v5 Configuration (Updated for beta.25)
-import NextAuth from "next-auth"
+// lib/auth.ts - Fixed NextAuth v5 Configuration with Proper Types
+import NextAuth, { type DefaultSession } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
-import { UserRole } from "@prisma/client"
+import { UserRole, GradeLevel } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import type { JWT } from "next-auth/jwt"
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -16,17 +17,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+  pages: {
+    signIn: "/login",
+    error: "/auth/error",
+  },
   providers: [
     Credentials({
-      id: "credentials",
-      name: "credentials",
+      // The name to display on the sign in form (e.g. 'Sign in with...')
+      name: "Credentials",
+      // The credentials is used to generate a suitable form on the sign in page.
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
         try {
+          console.log('🔐 Auth attempt with:', credentials?.email);
+          
           if (!credentials?.email || !credentials?.password) {
+            console.log('❌ Missing credentials');
             return null
           }
 
@@ -54,14 +63,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           })
 
           if (!user) {
+            console.log('❌ User not found:', email);
             return null
           }
 
           const isPasswordValid = await bcrypt.compare(password, user.passwordHash)
           
           if (!isPasswordValid) {
+            console.log('❌ Invalid password for:', email);
             return null
           }
+
+          console.log('✅ Auth successful for:', email);
 
           // Update last login
           await prisma.user.update({
@@ -69,7 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             data: { updatedAt: new Date() }
           }).catch(console.error)
 
-          // Return user data that will be stored in the token
+          // Return user data for JWT token
           return {
             id: user.id,
             email: user.email,
@@ -81,7 +94,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             school: user.school
           }
         } catch (error) {
-          console.error('Auth error:', error)
+          console.error('❌ Auth error:', error)
           return null
         }
       }
@@ -89,18 +102,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user, trigger, session }) {
+      console.log('🔐 JWT callback - trigger:', trigger, 'user:', !!user);
+      
       // Initial sign in - store user data in token
       if (user) {
+        token.id = user.id
+        token.email = user.email
+        token.name = user.name
+        token.picture = user.image
         token.role = user.role
         token.schoolId = user.schoolId
         token.gradeLevel = user.gradeLevel
         token.school = user.school
       }
 
-      // Handle session updates (when user data changes)
+      // Handle session updates
       if (trigger === "update" && session && token.sub) {
         try {
-          // Refresh user data from database
           const dbUser = await prisma.user.findUnique({
             where: { id: token.sub },
             select: {
@@ -135,72 +153,53 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token
     },
     
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: JWT }) {
+      console.log('🔐 Session callback - token.sub:', token.sub);
+      
       // Add custom fields to session from JWT token
-      if (token.sub && session.user) {
+      if (session.user && token.sub) {
         session.user.id = token.sub
         session.user.role = token.role as UserRole
         session.user.schoolId = token.schoolId as string | null
-        session.user.gradeLevel = token.gradeLevel as string | null
+        session.user.gradeLevel = token.gradeLevel as GradeLevel | null
         session.user.school = token.school as any
       }
+      
       return session
     },
 
     // Control where users are redirected after sign in
     async redirect({ url, baseUrl }) {
+      console.log('🔐 Redirect callback - url:', url, 'baseUrl:', baseUrl);
+      
+      // Always allow callback URLs
+      if (url.includes('/api/auth/callback')) {
+        return url
+      }
+      
       // If the URL is relative, prepend the base URL
       if (url.startsWith("/")) {
         return `${baseUrl}${url}`
       }
+      
       // If the URL is on the same origin, allow it
       if (new URL(url).origin === baseUrl) {
         return url
       }
-      // Otherwise redirect to base URL
-      return baseUrl
-    },
-
-    // Handle authorization for pages
-    async authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user
-      const isAuthPage = nextUrl.pathname.startsWith('/login') || nextUrl.pathname.startsWith('/register')
       
-      // Allow access to auth pages when not logged in
-      if (isAuthPage) {
-        return !isLoggedIn
-      }
-      
-      // Require authentication for all other pages
-      return isLoggedIn
+      // Default redirect to dashboard
+      return `${baseUrl}/dashboard`
     }
-  },
-  pages: {
-    signIn: "/login",
-    error: "/auth/error",
   },
   events: {
     async signIn({ user, isNewUser }) {
-      if (isNewUser) {
-        console.log(`New user registered: ${user.email}`)
-      }
-      
-      // Log sign in event (optional)
-      try {
-        if (user.id) {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { updatedAt: new Date() }
-          })
-        }
-      } catch (error) {
-        console.error('Error logging sign in:', error)
-      }
+      console.log('🔐 Sign in event - user:', user.email, 'isNew:', isNewUser);
     },
     
-    async signOut({ token }) {
-      if (token?.email) {
-        console.log(`User signed out: ${token.email}`)
+     async signOut(message) {
+      console.log('🔐 Sign out event');
+      if ('token' in message && message.token) {
+        console.log('🔐 Sign out - user:', message.token.email);
       }
     }
   },
@@ -213,9 +212,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   
   // Trust host for deployment
   trustHost: true,
-  
-  // Experimental features for NextAuth beta
-  experimental: {
-    enableWebAuthn: false,
-  }
 })

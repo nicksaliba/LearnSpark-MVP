@@ -1,5 +1,4 @@
-
-// components/auth/register-form.tsx - Registration form
+// components/auth/register-form.tsx - Fixed Registration form
 'use client'
 
 import { useState } from 'react'
@@ -7,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
-import { Eye, EyeOff, User } from 'lucide-react'
+import { Eye, EyeOff, User, AlertCircle } from 'lucide-react'
 
 export function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false)
@@ -26,8 +25,16 @@ export function RegisterForm() {
     const password = formData.get('password') as string
     const confirmPassword = formData.get('confirmPassword') as string
 
+    // Validate passwords match
     if (password !== confirmPassword) {
       setError('Passwords do not match')
+      setIsLoading(false)
+      return
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
       setIsLoading(false)
       return
     }
@@ -39,13 +46,16 @@ export function RegisterForm() {
         body: JSON.stringify({ username, email, password }),
       })
 
+      const data = await response.json()
+
       if (response.ok) {
-        router.push('/login?message=Account created successfully')
+        // Registration successful, redirect to login with success message
+        router.push('/login?message=' + encodeURIComponent('Account created successfully! Please log in.'))
       } else {
-        const data = await response.json()
         setError(data.error || 'Registration failed')
       }
     } catch (error) {
+      console.error('Registration error:', error)
       setError('An unexpected error occurred')
     } finally {
       setIsLoading(false)
@@ -72,6 +82,8 @@ export function RegisterForm() {
               required
               className="pl-10"
               placeholder="Choose a username"
+              disabled={isLoading}
+              autoComplete="username"
             />
             <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
@@ -88,6 +100,8 @@ export function RegisterForm() {
             required
             className="mt-1"
             placeholder="your@email.com"
+            disabled={isLoading}
+            autoComplete="email"
           />
         </div>
 
@@ -104,11 +118,14 @@ export function RegisterForm() {
               className="pr-10"
               placeholder="••••••••"
               minLength={6}
+              disabled={isLoading}
+              autoComplete="new-password"
             />
             <button
               type="button"
               className="absolute inset-y-0 right-0 flex items-center pr-3"
               onClick={() => setShowPassword(!showPassword)}
+              disabled={isLoading}
             >
               {showPassword ? (
                 <EyeOff className="h-4 w-4 text-gray-400" />
@@ -131,11 +148,16 @@ export function RegisterForm() {
             className="mt-1"
             placeholder="••••••••"
             minLength={6}
+            disabled={isLoading}
+            autoComplete="new-password"
           />
         </div>
 
         {error && (
-          <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">{error}</div>
+          <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-md">
+            <AlertCircle className="h-4 w-4" />
+            {error}
+          </div>
         )}
 
         <Button 

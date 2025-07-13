@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn, getSession } from 'next-auth/react'
+import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,7 @@ export function LoginForm() {
 
   // Check for registration success message
   const message = searchParams?.get('message')
+  const callbackUrl = searchParams?.get('callbackUrl') || '/dashboard'
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -34,7 +35,7 @@ export function LoginForm() {
       const result = await signIn('credentials', {
         email,
         password,
-        redirect: false, // Important: don't let NextAuth handle redirect
+        redirect: false,
       })
 
       console.log('🔐 SignIn result:', result)
@@ -43,23 +44,11 @@ export function LoginForm() {
         console.log('❌ Login failed:', result.error)
         setError('Invalid email or password')
       } else if (result?.ok) {
-        console.log('✅ Login successful!')
+        console.log('✅ Login successful! Redirecting to:', callbackUrl)
         
-        // Wait a bit for the session to be established
-        await new Promise(resolve => setTimeout(resolve, 100))
-        
-        // Verify session was created
-        const session = await getSession()
-        console.log('🔐 Session after login:', session?.user?.email || 'No session')
-        
-        if (session) {
-          console.log('🚀 Redirecting to dashboard...')
-          // Force a hard navigation to ensure middleware runs
-          window.location.href = '/dashboard'
-        } else {
-          console.log('❌ No session found after login')
-          setError('Login successful but session not created. Please try again.')
-        }
+        // Use router.push for client-side navigation
+        router.push(callbackUrl)
+        router.refresh() // Refresh to update the session
       } else {
         console.log('❓ Unknown login result:', result)
         setError('An unexpected error occurred')
@@ -99,6 +88,7 @@ export function LoginForm() {
             className="mt-1"
             placeholder="your@email.com"
             disabled={isLoading}
+            autoComplete="email"
           />
         </div>
 
@@ -115,6 +105,7 @@ export function LoginForm() {
               className="pr-10"
               placeholder="••••••••"
               disabled={isLoading}
+              autoComplete="current-password"
             />
             <button
               type="button"
@@ -159,7 +150,13 @@ export function LoginForm() {
       {/* Debug info in development */}
       {process.env.NODE_ENV === 'development' && (
         <div className="mt-6 p-3 bg-gray-100 rounded text-xs">
-          <p>Debug: Check browser console for login flow logs</p>
+          <p className="font-semibold">Debug Info:</p>
+          <p>Callback URL: {callbackUrl}</p>
+          <p>Check browser console for detailed logs</p>
+          <hr className="my-2" />
+          <p className="font-semibold">Test Credentials:</p>
+          <p>Email: student1@school.edu</p>
+          <p>Password: demo123</p>
         </div>
       )}
     </Card>
